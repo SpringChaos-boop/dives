@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Нырки КП
 // @namespace    http://tampermonkey.net/
-// @version      3.7.4
+// @version      3.7.5
 // @description  Исключительно для Крылатого племени. Скрипт реализует лог добычи ресурсов для роли «нырок». Оптимизирован под мобильные устройства.
 // @author       Первая версия и идея принадлежат OGRTSV; исправления, доработка, улучшения и текущая поддержка осуществляются игроком Горицвет [1705753]
 // @match        https://catwar.net/cw3*
@@ -126,7 +126,7 @@
         { "name": "чудо-рыбу", "typeId": "12644", "label": "Савелий" },
         { "name": "полосатую ящерку-длинношейку", "typeId": "12645", "label": "Люся" },
         { "name": "причудливую ящерку-длинношейку", "typeId": "12646", "label": "Причудливая ящерка-длинношейка" },
-        { "name": "жучка-пузанчика", "typeId": "12647", "label": "Жучок-пузанчик" }
+        { "name": "жука-пузанчика", "typeId": "12647", "label": "Жучок-пузанчик" }
       ],
       "folder": true,
       "groups": []
@@ -560,10 +560,12 @@
     return "";
   }
 
+  // --- ФИКС 2: Более надежный поиск картинки ---
   function typeIdFromBlob(s) {
-    const m = String(s || "").match(/things\/(\d+)/i);
+    const m = String(s || "").match(/things[\/_]([0-9]+)/i) || String(s || "").match(/([0-9]+)\.png/i);
     return m ? m[1] : "";
   }
+  
   function typeIdFromEl(el) {
     if (!el) return "";
     const bits = [];
@@ -575,9 +577,11 @@
     return "";
   }
 
+  // --- ФИКС 1: Более надежный поиск ID предмета во рту ---
   function getMouthItems() {
     return Array.from(document.querySelectorAll("#itemList .itemInMouth")).map((el) => {
-      return { id: String(el.id || ""), typeId: typeIdFromEl(el) || null };
+      const uid = el.id || el.getAttribute("data-id") || el.getAttribute("data-uid") || "";
+      return { id: String(uid), typeId: typeIdFromEl(el) || null };
     }).filter((x) => x.id);
   }
 
@@ -667,10 +671,12 @@
     keep(pendingLooks, 300000);
   }
 
+  // --- ФИКС 4: Более надежный парсинг thdey ---
   function readThdeyId() {
     const th = document.querySelector("#thdey");
     if (!th) return null;
-    const m = String(th.textContent || "").match(/Уникальный ID:\s*([0-9]+)/i);
+    const text = String(th.textContent || "");
+    const m = text.match(/(?:Уникальный\s+)?ID[:\s]*([0-9]+)/i) || text.match(/\b([0-9]{5,})\b/);
     return m ? m[1] : null;
   }
 
@@ -766,7 +772,8 @@
 
       if (!news && !amb && pendingFinds.length === 1 && pendingNews.length === 1) {
         const only = pendingNews[0];
-        if (!state.items[only.id] && !keyOfMouthItem(only) && Math.abs(only.t - find.t) < 4000) {
+        // --- ФИКС 3: Увеличено время ожидания с 4 до 15 секунд ---
+        if (!state.items[only.id] && !keyOfMouthItem(only) && Math.abs(only.t - find.t) < 15000) {
           news = pendingNews.shift();
         }
       }
@@ -1693,7 +1700,7 @@
   function applyTableHeight(h) {
     const wrap = panel.querySelector("#nyTableWrap");
     if (!wrap) return;
-    // На мобильных не даем таблице раздуться больше 50% экрана
+    // На мобильных не даем таблице раздуться больше 60% экрана
     const maxAllowed = window.innerHeight * 0.6;
     h = Math.max(150, Math.min(maxAllowed, Number(h) || 320));
     wrap.style.height = h + "px";
