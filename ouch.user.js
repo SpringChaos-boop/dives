@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Нырки КП
 // @namespace    http://tampermonkey.net/
-// @version      3.7.3
-// @description  Исключительно для Крылатого племени. Копирование и последующее распространене карается запретом на кислород. Скрипт реализует лог добычи ресурсов для роли «нырок» — небольшой фарм-панели со счётчиками и подсветкой игровой истории.
+// @version      3.7.4
+// @description  Исключительно для Крылатого племени. Скрипт реализует лог добычи ресурсов для роли «нырок». Оптимизирован под мобильные устройства.
 // @author       Первая версия и идея принадлежат OGRTSV; исправления, доработка, улучшения и текущая поддержка осуществляются игроком Горицвет [1705753]
 // @match        https://catwar.net/cw3*
 // @match        https://catwar.su/cw3*
@@ -1221,15 +1221,19 @@
   panel.innerHTML = `
   <style>
     #nyTrigger {
-      position: fixed; bottom: 20px; left: 20px; z-index: 999999;
-      width: 44px; height: 44px; border-radius: 50%;
+      position: fixed; 
+      bottom: max(20px, env(safe-area-inset-bottom)); 
+      left: max(20px, env(safe-area-inset-left)); 
+      z-index: 999999;
+      width: 50px; height: 50px; border-radius: 50%;
       background: linear-gradient(135deg, #1e5799 0%,#2989d8 50%,#207cca 51%,#7db9e8 100%);
-      color: white; font-size: 22px;
+      color: white; font-size: 24px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; user-select: none;
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.3);
       transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s;
       border: 1px solid rgba(255, 255, 255, 0.2);
+      touch-action: manipulation;
     }
     #nyTrigger:hover {
       transform: scale(1.1) rotate(-5deg);
@@ -1240,8 +1244,9 @@
     }
 
     #resourcePanel {
-      position: fixed; top: 100px; left: 50px;
-      width: 462px; font-size: 14.5px; user-select: none;
+      position: fixed; top: 10px; left: 10px;
+      width: 462px; max-width: calc(100vw - 20px);
+      font-size: 14.5px; user-select: none;
       font-family: "Trebuchet MS", "Segoe UI", sans-serif;
       color: #d9f4ff;
       z-index: 999998;
@@ -1278,6 +1283,7 @@
       height: 352px; overflow: auto; border-radius: 8px;
       border: 1px solid rgba(70, 170, 210, .28);
       background: rgba(2, 16, 36, .28);
+      -webkit-overflow-scrolling: touch;
     }
     #resourcePanel thead th {
       position: sticky; top: 0; z-index: 3;
@@ -1342,22 +1348,30 @@
       border-top: 1px solid rgba(100, 210, 180, .3);
     }
     #nyResize {
-      height: 9px; margin: 3px 0 1px; cursor: ns-resize; border-radius: 6px;
-      background: linear-gradient(180deg, transparent 3px, rgba(110, 200, 230, .35) 3px 4px, transparent 4px 6px, rgba(110, 200, 230, .2) 6px 7px, transparent 7px);
+      height: 15px; margin: 4px 0 2px; cursor: ns-resize; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      touch-action: none;
     }
-    #nyResize:hover { background-color: rgba(80, 180, 220, .12); }
+    #nyResize::before {
+      content: ""; width: 40px; height: 4px; border-radius: 2px;
+      background: rgba(110, 200, 230, .35); transition: background .2s;
+    }
+    #nyResize:hover::before { background: rgba(110, 200, 230, .6); }
+    
     #panelHeader {
       cursor: move;
       background: linear-gradient(90deg, rgba(16, 70, 108, .7), rgba(10, 36, 64, .45));
-      padding: 5px 8px; border-radius: 8px; margin-bottom: 6px;
+      padding: 8px; border-radius: 8px; margin-bottom: 8px;
       display: flex; justify-content: space-between; align-items: center;
       border: 1px solid rgba(100, 200, 230, .22);
+      touch-action: none;
     }
     #nyTitle { color: #e6fbff; text-shadow: 0 0 10px rgba(80, 200, 255, .25); }
-    #resourcePanel .hdr-btns { display: flex; gap: 4px; }
+    #resourcePanel .hdr-btns { display: flex; gap: 6px; }
     #resourcePanel .hdr-btns button {
       background: rgba(20, 80, 120, .65); border: 1px solid rgba(120, 210, 240, .3);
-      color: #e8fbff; cursor: pointer; border-radius: 5px; padding: 2px 7px;
+      color: #e8fbff; cursor: pointer; border-radius: 5px; padding: 6px 12px;
+      font-size: 13px; touch-action: manipulation;
     }
     #resourcePanel .hdr-btns button:hover { background: rgba(40, 120, 170, .75); }
     #resourcePanel .hint { font-size: 11px; opacity: .78; margin-top: 6px; line-height: 1.35; color: #b7dcea; }
@@ -1365,10 +1379,12 @@
       margin-top: 6px; max-height: 120px; overflow: auto;
       font-size: 11px; background: rgba(2, 14, 28, .55); border-radius: 6px; padding: 4px 6px;
       display: none; text-align: left; border: 1px solid rgba(70, 160, 200, .25);
+      -webkit-overflow-scrolling: touch;
     }
-    #idLog div { padding: 1px 0; border-bottom: 1px solid rgba(40, 80, 110, .35); }
+    #idLog div { padding: 2px 0; border-bottom: 1px solid rgba(40, 80, 110, .35); }
     #idLog .st-found { color: #9cdcff; }
     #idLog .st-delivered { color: #8ef0c0; }
+    
     #ist .cw-ny-found { background: rgba(100,180,255,0.25); padding: 1px 2px; border-radius: 3px; }
     #ist .cw-ny-put { background: rgba(160,255,160,0.25); padding: 1px 2px; border-radius: 3px; }
     #ist .cw-ny-pick { background: rgba(255,196,90,0.28); padding: 1px 2px; border-radius: 3px; }
@@ -1376,34 +1392,39 @@
 
     #nyGate, #nyStudio { position: fixed; z-index: 1000000; font-family: sans-serif; color: #eee; }
     #nyGate { inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; }
-    #nyGate .box { background: #1a1a1a; border: 1px solid #555; border-radius: 8px; padding: 14px 16px; width: 280px; }
+    #nyGate .box { background: #1a1a1a; border: 1px solid #555; border-radius: 8px; padding: 14px 16px; width: 280px; max-width: 90vw; }
     #nyGate input {
       width: 100%; box-sizing: border-box; margin: 8px 0;
-      background: #111; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 6px 8px;
+      background: #111; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 8px;
     }
     #nyGate button, #nyStudio button {
-      background: #444; border: none; color: #fff; border-radius: 4px; padding: 4px 8px; cursor: pointer;
+      background: #444; border: none; color: #fff; border-radius: 4px; padding: 6px 12px; cursor: pointer;
+      touch-action: manipulation;
     }
     #nyGate button:hover, #nyStudio button:hover { background: #5a5a5a; }
+    
     #nyStudio {
-      top: 80px; left: 490px; width: 640px; max-height: 84vh;
+      top: 10px; left: 50%; transform: translateX(-50%);
+      width: 640px; max-width: 96vw; max-height: 90vh;
       background: rgba(10,10,10,.94); border: 2px solid #3a3a3a;
       border-radius: 8px; display: none; flex-direction: column;
     }
     #nyStudio .st-head {
-      cursor: move; background: #222; padding: 6px 8px;
+      cursor: move; background: #222; padding: 10px;
       display: flex; justify-content: space-between; align-items: center;
       border-radius: 6px 6px 0 0;
+      touch-action: none;
     }
-    #nyStudio .st-body { overflow: auto; padding: 8px; font-size: 13px; }
+    #nyStudio .st-body { overflow: auto; padding: 10px; font-size: 13px; -webkit-overflow-scrolling: touch; }
     #nyStudio .st-foot {
-      padding: 8px; border-top: 1px solid #333;
-      display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+      padding: 10px; border-top: 1px solid #333;
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
     }
-    #nyStudio h3 { margin: 10px 0 6px; font-size: 13px; color: #bcd; }
-    #nyStudio .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+    #nyStudio h3 { margin: 12px 0 6px; font-size: 13px; color: #bcd; }
+    #nyStudio .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
     #nyStudio input[type="text"], #nyStudio input[type="number"], #nyStudio select {
-      background: #141414; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 4px 6px;
+      background: #141414; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 6px;
+      max-width: 100%;
     }
     #nyStudio .card {
       border: 1px solid #333; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #151515;
@@ -1419,7 +1440,7 @@
     #nyStudio .chip {
       display: flex; align-items: center; gap: 4px;
       background: #222; border: 1px solid #444; border-radius: 6px;
-      padding: 2px 6px; cursor: pointer;
+      padding: 4px 8px; cursor: pointer;
     }
     #nyStudio .chip:hover { border-color: #8ca; }
     #nyStudio .chip img { width: 22px; height: 22px; }
@@ -1428,7 +1449,26 @@
     #nyStudio .ok { background: #264 !important; }
     #nyStudio .zone-pill {
       display: inline-flex; gap: 4px; align-items: center;
-      background: #222; border: 1px solid #444; border-radius: 12px; padding: 2px 8px; margin: 2px;
+      background: #222; border: 1px solid #444; border-radius: 12px; padding: 4px 10px; margin: 2px;
+    }
+
+    /* --- МОБИЛЬНАЯ АДАПТАЦИЯ --- */
+    @media (max-width: 600px) {
+      #resourcePanel {
+        padding: 6px 6px 4px;
+        border-radius: 10px;
+      }
+      #panelHeader { padding: 6px; margin-bottom: 6px; }
+      #nyTitle { font-size: 13px; }
+      #resourcePanel .hdr-btns button { padding: 4px 8px; font-size: 12px; }
+      #resourcePanel td, #resourcePanel th { padding: 4px 2px; }
+      #resourcePanel .ny-pic img, #resourcePanel .ny-fold-pic img { width: 44px; height: 44px; }
+      #resourcePanel tr.ny-child img { width: 30px; height: 30px; }
+      #resourcePanel tr.ny-child .ny-child-name { font-size: 12px; }
+      #nyStudio .card-top { flex-direction: column; align-items: stretch; }
+      #nyStudio input[type="text"] { width: 100% !important; }
+      #nyStudio .items td { font-size: 11px; }
+      #nyStudio .items input { padding: 4px; }
     }
   </style>
   <div id="panelHeader">
@@ -1436,15 +1476,15 @@
     <div class="hdr-btns">
       <button id="idsBtn" title="Показать привязанные ID">ID</button>
       <button id="resetBtn" title="Обнулить счётчик">Сброс</button>
-      <button id="toggleBtn" title="Скрыть панель" style="font-weight:bold; padding:2px 10px; font-size:14px; line-height:1;">×</button>
+      <button id="toggleBtn" title="Скрыть панель" style="font-weight:bold; padding:2px 10px;">×</button>
     </div>
   </div>
   <div id="panelContent">
     <div id="nyTableWrap"><table id="resourceTable"></table></div>
-    <div id="nyResize" title="Высота таблицы"></div>
+    <div id="nyResize" title="Потяните, чтобы изменить высоту"></div>
     <div id="idLog"></div>
     <div class="hint">
-      Наведите на подсвеченное действие в истории — появится уникальный ID.
+      Наведите (или тапните) на подсвеченное действие в истории — появится уникальный ID.
       Сдача только в нужной локации у уже подписанного ID.
       Подняли обратно — снова не сдан. Камень сдаётся, если просто положили.
       Очистка истории счётчик не сбрасывает.
@@ -1459,14 +1499,14 @@
   if (cssNode) { cssNode.id = "cwNyCss"; (document.head || document.documentElement).appendChild(cssNode); }
   mount(panel);
 
-  // --- ДОБАВЛЕНА ПОДСКАЗКА ---
+  // --- УНИВЕРСАЛЬНАЯ ПОДСКАЗКА (ПК + Мобилки) ---
   const nyTooltip = document.createElement("div");
   nyTooltip.id = "nyTooltip";
   nyTooltip.style.cssText = `
     position: fixed; display: none; z-index: 10000000;
     background: rgba(15, 31, 48, 0.95); color: #7ad7ff;
-    font-size: 11px; line-height: 1.2;
-    padding: 4px 8px; border-radius: 4px;
+    font-size: 12px; line-height: 1.2;
+    padding: 6px 10px; border-radius: 4px;
     border: 1px solid #4fc3f7;
     white-space: nowrap;
     pointer-events: none;
@@ -1475,45 +1515,73 @@
   `;
   mount(nyTooltip);
 
+  const showTooltip = (x, y, id) => {
+    if (id) {
+      nyTooltip.textContent = "Уникальный ID: " + id;
+    } else {
+      nyTooltip.textContent = "Уникальный ID не определён";
+    }
+    nyTooltip.style.display = "block";
+    // Чтобы на телефоне подсказка не улетала за край экрана
+    const w = nyTooltip.offsetWidth;
+    let left = x + 12;
+    if (left + w > window.innerWidth) left = x - w - 12;
+    nyTooltip.style.left = left + "px";
+    nyTooltip.style.top = (y + 12) + "px";
+  };
+
+  const hideTooltip = () => { nyTooltip.style.display = "none"; };
+
+  // Для ПК
   document.addEventListener("mouseover", (e) => {
     if (!e.target.closest) return;
     const tag = e.target.closest(".cw-ny-tag");
-    if (tag) {
-      const id = tag.getAttribute("data-cw-id");
-      if (id) {
-        nyTooltip.textContent = "Уникальный ID: " + id;
-      } else {
-        nyTooltip.textContent = "Уникальный ID не определён";
-      }
-      nyTooltip.style.display = "block";
-      nyTooltip.style.left = (e.clientX + 12) + "px";
-      nyTooltip.style.top = (e.clientY + 12) + "px";
-    } else {
-      nyTooltip.style.display = "none";
-    }
+    if (tag) showTooltip(e.clientX, e.clientY, tag.getAttribute("data-cw-id"));
+    else hideTooltip();
   });
   document.addEventListener("mousemove", (e) => {
-    if (nyTooltip.style.display === "block") {
-      nyTooltip.style.left = (e.clientX + 12) + "px";
-      nyTooltip.style.top = (e.clientY + 12) + "px";
-    }
+    if (nyTooltip.style.display === "block") showTooltip(e.clientX, e.clientY, null);
   });
   document.addEventListener("mouseout", (e) => {
-    if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest(".cw-ny-tag")) {
-      nyTooltip.style.display = "none";
-    }
+    if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest(".cw-ny-tag")) hideTooltip();
   });
+
+  // Для мобильных устройств (тап)
+  document.addEventListener("touchstart", (e) => {
+    if (!e.target.closest) return;
+    const tag = e.target.closest(".cw-ny-tag");
+    if (tag) {
+      e.preventDefault(); // Останавливаем зум/скролл при клике на тег
+      const touch = e.touches[0];
+      // Т.к. в showTooltip передаем null, там перезапишется текст. Передадим напрямую.
+      const id = tag.getAttribute("data-cw-id");
+      if (id) nyTooltip.textContent = "Уникальный ID: " + id;
+      else nyTooltip.textContent = "Уникальный ID не определён";
+      
+      nyTooltip.style.display = "block";
+      const w = nyTooltip.offsetWidth;
+      let left = touch.clientX + 12;
+      if (left + w > window.innerWidth) left = touch.clientX - w - 12;
+      nyTooltip.style.left = left + "px";
+      nyTooltip.style.top = (touch.clientY + 12) + "px";
+    } else {
+      hideTooltip();
+    }
+  }, { passive: false });
   // --------------------------------
 
   function placePanelOnScreen() {
-    const w = panel.offsetWidth || 462;
+    const w = panel.offsetWidth || 300;
     const h = 80;
     let left = parseFloat(panel.style.left);
     let top = parseFloat(panel.style.top);
-    if (Number.isNaN(left)) left = 50;
-    if (Number.isNaN(top)) top = 100;
-    left = Math.min(Math.max(8, left), Math.max(8, window.innerWidth - Math.min(w, 120)));
-    top = Math.min(Math.max(8, top), Math.max(8, window.innerHeight - h));
+    if (Number.isNaN(left)) left = 10;
+    if (Number.isNaN(top)) top = 10;
+    
+    // Не даем панели вылезти за пределы экрана
+    left = Math.min(Math.max(5, left), window.innerWidth - w - 5);
+    top = Math.min(Math.max(5, top), window.innerHeight - h - 5);
+    
     panel.style.left = left + "px";
     panel.style.top = top + "px";
   }
@@ -1554,24 +1622,40 @@
     renderIdLog();
   };
 
+  // --- ПЕРЕТАСКИВАНИЕ ПАНЕЛИ (ПК + МОБИЛКИ) ---
   let drag = false, ox = 0, oy = 0;
-  panel.querySelector("#panelHeader").addEventListener("mousedown", (e) => {
+  const header = panel.querySelector("#panelHeader");
+
+  const startDrag = (e) => {
     if (e.target.tagName === "BUTTON") return;
     drag = true;
-    ox = e.clientX - panel.offsetLeft;
-    oy = e.clientY - panel.offsetTop;
-  });
-  document.addEventListener("mousemove", (e) => {
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    ox = clientX - panel.offsetLeft;
+    oy = clientY - panel.offsetTop;
+  };
+  const moveDrag = (e) => {
     if (!drag) return;
-    panel.style.left = (e.clientX - ox) + "px";
-    panel.style.top = (e.clientY - oy) + "px";
-  });
-  document.addEventListener("mouseup", () => {
+    if (e.cancelable) e.preventDefault(); // Останавливаем скролл страницы
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    panel.style.left = (clientX - ox) + "px";
+    panel.style.top = (clientY - oy) + "px";
+  };
+  const endDrag = () => {
     if (!drag) return;
     drag = false;
     placePanelOnScreen();
     localStorage.setItem(POS_KEY, JSON.stringify({ left: panel.offsetLeft, top: panel.offsetTop }));
-  });
+  };
+
+  header.addEventListener("mousedown", startDrag);
+  header.addEventListener("touchstart", startDrag, { passive: false });
+  document.addEventListener("mousemove", moveDrag);
+  document.addEventListener("touchmove", moveDrag, { passive: false });
+  document.addEventListener("mouseup", endDrag);
+  document.addEventListener("touchend", endDrag);
+  // -----------------------------------
 
   function zoneMeta(id) { return zones.find((z) => z.id === id) || null; }
 
@@ -1609,28 +1693,48 @@
   function applyTableHeight(h) {
     const wrap = panel.querySelector("#nyTableWrap");
     if (!wrap) return;
-    h = Math.max(150, Math.min(Math.round(window.innerHeight * 0.75), Number(h) || 320));
+    // На мобильных не даем таблице раздуться больше 50% экрана
+    const maxAllowed = window.innerHeight * 0.6;
+    h = Math.max(150, Math.min(maxAllowed, Number(h) || 320));
     wrap.style.height = h + "px";
   }
+  
+  // --- ИЗМЕНЕНИЕ РАЗМЕРА ТАБЛИЦЫ (ПК + МОБИЛКИ) ---
   function bindTableResize() {
     if (panel.dataset.nyResize === "1") return;
     panel.dataset.nyResize = "1";
-    let drag = false, y0 = 0, h0 = 0;
-    panel.addEventListener("mousedown", (e) => {
+    let rDrag = false, y0 = 0, h0 = 0;
+
+    const startResize = (e) => {
       if (!e.target.closest || !e.target.closest("#nyResize")) return;
       e.preventDefault(); e.stopPropagation();
       const wrap = panel.querySelector("#nyTableWrap");
       if (!wrap) return;
-      drag = true; y0 = e.clientY; h0 = wrap.offsetHeight;
-    });
-    document.addEventListener("mousemove", (e) => { if (drag) applyTableHeight(h0 + (e.clientY - y0)); });
-    document.addEventListener("mouseup", () => {
-      if (!drag) return;
-      drag = false;
+      rDrag = true; 
+      y0 = e.touches ? e.touches[0].clientY : e.clientY; 
+      h0 = wrap.offsetHeight;
+    };
+    const moveResize = (e) => { 
+      if (!rDrag) return; 
+      if (e.cancelable) e.preventDefault();
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      applyTableHeight(h0 + (clientY - y0)); 
+    };
+    const endResize = () => {
+      if (!rDrag) return;
+      rDrag = false;
       const wrap = panel.querySelector("#nyTableWrap");
       if (wrap) localStorage.setItem(HEIGHT_KEY, String(wrap.offsetHeight));
-    });
+    };
+
+    panel.addEventListener("mousedown", startResize);
+    panel.addEventListener("touchstart", startResize, { passive: false });
+    document.addEventListener("mousemove", moveResize);
+    document.addEventListener("touchmove", moveResize, { passive: false });
+    document.addEventListener("mouseup", endResize);
+    document.addEventListener("touchend", endResize);
   }
+  // -----------------------------------
 
   function setFolderOpen(table, key, open) {
     const folder = table.querySelector('tr.ny-folder[data-key="' + cssEscape(key) + '"]');
@@ -1990,6 +2094,17 @@
   panel.querySelector("#nyTitle").addEventListener("click", (e) => {
     if (e.shiftKey && e.altKey) { e.preventDefault(); e.stopPropagation(); openGate(); }
   });
+  
+  // На телефонах триггер админки: долгий тап по заголовку
+  let titlePressTimer;
+  panel.querySelector("#nyTitle").addEventListener("touchstart", (e) => {
+    titlePressTimer = setTimeout(() => {
+      e.preventDefault();
+      openGate();
+    }, 800);
+  }, { passive: false });
+  panel.querySelector("#nyTitle").addEventListener("touchend", () => clearTimeout(titlePressTimer));
+  panel.querySelector("#nyTitle").addEventListener("touchmove", () => clearTimeout(titlePressTimer));
 
   const studio = document.createElement("div");
   studio.id = "nyStudio";
@@ -2004,14 +2119,14 @@
       <h3>Кто может пользоваться</h3>
       <div class="row">
         <span class="muted">Племя, как на странице кошки</span>
-        <input id="nyTribe" type="text" style="flex:1" placeholder="как на странице кошки" autocomplete="off">
+        <input id="nyTribe" type="text" placeholder="как на странице кошки" autocomplete="off">
       </div>
       <div class="muted">В код попадёт ключ, не название. Пустое поле — оставить как было.</div>
       <div class="muted" id="nyTribeRead" style="margin-bottom:8px"></div>
       <h3>Куда относить</h3>
       <div id="nyZones"></div>
       <div class="row">
-        <input id="nyZoneName" type="text" placeholder="Название локации как в игре" style="flex:1">
+        <input id="nyZoneName" type="text" placeholder="Название локации как в игре">
         <button type="button" id="nyZoneAdd">+ локация</button>
       </div>
       <h3>Что ловится и к чему относится</h3>
@@ -2024,28 +2139,49 @@
       <div id="nyMouth" class="chips"></div>
     </div>
     <div class="st-foot">
-      <button type="button" class="ok" id="nySave">Сохранить и применить</button>
-      <button type="button" id="nyExport">Экспорт в скрипт</button>
-      <button type="button" id="nyRevert">Вернуть встроенное</button>
+      <button type="button" class="ok" id="nySave">Сохранить</button>
+      <button type="button" id="nyExport">Экспорт</button>
+      <button type="button" id="nyRevert">Сбросить</button>
       <button type="button" id="nyPw">Сменить ключ</button>
       <button type="button" id="nyPwReset">× ключ</button>
       <span id="nyStMsg" class="muted"></span>
     </div>`;
   mount(studio);
 
+  // --- ПЕРЕТАСКИВАНИЕ СТУДИИ (ПК + МОБИЛКИ) ---
   let stDrag = false, stx = 0, sty = 0;
-  studio.querySelector(".st-head").addEventListener("mousedown", (e) => {
+  const stHead = studio.querySelector(".st-head");
+  const startStDrag = (e) => {
     if (e.target.tagName === "BUTTON") return;
     stDrag = true;
-    stx = e.clientX - studio.offsetLeft;
-    sty = e.clientY - studio.offsetTop;
-  });
-  document.addEventListener("mousemove", (e) => {
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const rect = studio.getBoundingClientRect();
+    stx = clientX - rect.left;
+    sty = clientY - rect.top;
+    // Переопределяем позиционирование с transform на absolute для мобилок
+    studio.style.transform = "none";
+    studio.style.left = rect.left + "px";
+    studio.style.top = rect.top + "px";
+  };
+  const moveStDrag = (e) => {
     if (!stDrag) return;
-    studio.style.left = (e.clientX - stx) + "px";
-    studio.style.top = (e.clientY - sty) + "px";
-  });
-  document.addEventListener("mouseup", () => { stDrag = false; });
+    if (e.cancelable) e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    studio.style.left = Math.max(0, Math.min(window.innerWidth - studio.offsetWidth, clientX - stx)) + "px";
+    studio.style.top = Math.max(0, Math.min(window.innerHeight - 50, clientY - sty)) + "px";
+  };
+  const endStDrag = () => { stDrag = false; };
+
+  stHead.addEventListener("mousedown", startStDrag);
+  stHead.addEventListener("touchstart", startStDrag, { passive: false });
+  document.addEventListener("mousemove", moveStDrag);
+  document.addEventListener("touchmove", moveStDrag, { passive: false });
+  document.addEventListener("mouseup", endStDrag);
+  document.addEventListener("touchend", endStDrag);
+  // -----------------------------------
+
   studio.querySelector("#nyStClose").onclick = () => { studio.style.display = "none"; };
 
   function stMsg(t) { const el = studio.querySelector("#nyStMsg"); if (el) el.textContent = t || ""; }
@@ -2073,7 +2209,7 @@
     const zbox = studio.querySelector("#nyZones");
     zbox.innerHTML = draft.zones.map((z, i) => `
       <span class="zone-pill">
-        <input type="text" data-zi="${i}" value="${escAttr(z.name)}" style="width:170px">
+        <input type="text" data-zi="${i}" value="${escAttr(z.name)}" style="flex:1; min-width:120px;">
         <button type="button" data-zd="${i}" class="danger">×</button>
       </span>`).join("");
     zbox.querySelectorAll("input[data-zi]").forEach((inp) => {
@@ -2115,7 +2251,7 @@
       <div class="card ${ci === focusCat ? "active" : ""}" data-ci="${ci}">
         <div class="card-top">
           <label class="muted">в таблице</label>
-          <input type="text" data-f="label" value="${escAttr(c.label)}" placeholder="Крепкая ветка" style="width:160px">
+          <input type="text" data-f="label" value="${escAttr(c.label)}" placeholder="Крепкая ветка" style="flex:1;">
           <label class="muted">сдавать в</label>
           <select data-f="zone">${zoneOptions(c.zone)}</select>
           <label class="muted">баллы</label>
@@ -2127,14 +2263,14 @@
         </div>
         <div class="row ny-folder-img" style="margin:6px 0;${asFolder ? "" : "display:none"}">
           <span class="muted">картинка папки</span>
-          <input type="text" data-f="img" value="${escAttr(foldImg)}" placeholder="https://… ссылка на свою картинку" style="flex:1">
+          <input type="text" data-f="img" value="${escAttr(foldImg)}" placeholder="https://… ссылка на свою картинку" style="flex:1; min-width:200px;">
           <img class="ny-folder-preview" src="${escAttr(foldPrev)}" alt="">
         </div>
         <div class="ny-subfolds" style="margin:6px 0;${asFolder ? "" : "display:none"}">
           <div class="muted" style="margin-bottom:4px">Подпапки внутри (раскрывающийся блок в логе)</div>
           ${(c.groups || []).map((g, gi) => `
           <div class="row">
-            <input type="text" data-gi="${gi}" value="${escAttr(g)}" placeholder="Крылатое племя" style="flex:1">
+            <input type="text" data-gi="${gi}" value="${escAttr(g)}" placeholder="Крылатое племя" style="flex:1;">
             <button type="button" class="danger" data-gdel="${gi}">×</button>
           </div>`).join("")}
           <div class="row"><button type="button" data-gadd="${ci}">+ подпапка</button></div>
@@ -2146,13 +2282,13 @@
             <tr>
               <td><input type="text" data-in="${ii}" data-f="name" value="${escAttr(it.name)}" placeholder="крепкую ветку"></td>
               <td><input type="text" data-in="${ii}" data-f="label" value="${escAttr(it.label || "")}" placeholder="Крепкая ветка"></td>
-              <td style="width:140px">
+              <td style="min-width:100px">
                 <select data-in="${ii}" data-f="group">
                   <option value="">—</option>
                   ${(c.groups || []).map((g) => `<option value="${escAttr(g)}"${String(it.group || "") === String(g) ? " selected" : ""}>${escAttr(g)}</option>`).join("")}
                 </select>
               </td>
-              <td style="width:110px"><input type="text" data-in="${ii}" data-f="typeId" value="${escAttr(it.typeId)}" placeholder="75"></td>
+              <td style="min-width:60px"><input type="text" data-in="${ii}" data-f="typeId" value="${escAttr(it.typeId)}" placeholder="75"></td>
               <td style="width:36px"><img src="${thingImg(it.typeId || "0")}" alt=""></td>
               <td style="width:28px"><button type="button" class="danger" data-idel="${ii}">×</button></td>
             </tr>`).join("")}
@@ -2166,6 +2302,7 @@
     box.querySelectorAll(".card").forEach((card) => {
       const ci = +card.dataset.ci;
       card.addEventListener("mousedown", () => { focusCat = ci; });
+      card.addEventListener("touchstart", () => { focusCat = ci; }, { passive: true });
       card.querySelectorAll("[data-f]").forEach((el) => {
         const apply = () => {
           const f = el.dataset.f;
@@ -2554,10 +2691,10 @@
     if (!box.querySelector("#resourceTable")) {
       box.innerHTML = `
         <div id="nyTableWrap"><table id="resourceTable"></table></div>
-        <div id="nyResize" title="Высота таблицы"></div>
+        <div id="nyResize" title="Потяните, чтобы изменить высоту"></div>
         <div id="idLog"></div>
         <div class="hint">
-          Наведите на подсвеченное действие в истории — появится уникальный ID.
+          Наведите (или тапните) на подсвеченное действие в истории — появится уникальный ID.
           Сдача только в нужной локации у уже подписанного ID.
           Подняли обратно — снова не сдан. Камень сдаётся, если просто положили.
           Очистка истории счётчик не сбрасывает.
