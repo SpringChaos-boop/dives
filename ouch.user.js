@@ -6,6 +6,8 @@
 // @author       Первая версия и идея принадлежат OGRTSV; исправления, доработка, улучшения и текущая поддержка осуществляются игроком Горицвет [1705753]
 // @match        https://catwar.net/cw3*
 // @match        https://catwar.su/cw3*
+// @updateURL    https://github.com/SpringChaos-boop/dives/raw/refs/heads/main/ouch.user.js
+// @downloadURL  https://github.com/SpringChaos-boop/dives/raw/refs/heads/main/ouch.user.js
 // @run-at       document-idle
 // @grant        none
 // ==/UserScript==
