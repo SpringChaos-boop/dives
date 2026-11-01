@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Нырки КП
 // @namespace    http://tampermonkey.net/
-// @version      3.7.6
+// @version      3.7.7
 // @description  Исключительно для Крылатого племени. Скрипт реализует лог добычи ресурсов для роли «нырок». Оптимизирован под мобильные устройства и устойчив к изменениям верстки.
 // @author       Первая версия и идея принадлежат OGRTSV; исправления, доработка, улучшения и текущая поддержка осуществляются игроком Горицвет [1705753]
+// @match        https://catwar.net/cw3/
 // @match        https://catwar.net/cw3
+// @match        https://catwar.su/cw3/
 // @match        https://catwar.su/cw3
 // @updateURL    https://github.com/SpringChaos-boop/dives/raw/refs/heads/main/ouch.user.js
 // @downloadURL  https://github.com/SpringChaos-boop/dives/raw/refs/heads/main/ouch.user.js
@@ -14,6 +16,13 @@
 
 (function () {
   "use strict";
+
+  // --- СТРОГАЯ ПРОВЕРКА: ЗАПУСКАТЬСЯ ТОЛЬКО НА ГЛАВНОЙ СТРАНИЦЕ ---
+  const currentPath = location.pathname;
+  if (currentPath !== "/cw3/" && currentPath !== "/cw3") {
+    return;
+  }
+  // -----------------------------------------------------------------
 
   const _S = "nynyny.v22";
   const _K = "27a520812d8c35bca1bc2b5f3b9fcaefbe81e064c8f02c155bcb658d51636fef";
@@ -281,7 +290,6 @@
   }
   let farm = loadFarm();
 
-  // Более гибкие регулярные выражения, не зависящие от точного порядка слов
   const STONE_RE = /(?:небольшо(?:й|го|му|го)\s+)?кам(?:ень|ня|ни|нем|ушек|ушка|ушки)/i;
   const FIND_RE = /(?:Обнаружил|Обнаружила)\s+([^.!?]+)/i;
   const PUT_RE = /(?:Положил|Положила)\s+(?:на\s+землю\s+)?([^.!?]+?)(?:\s+на\s+землю)?(?=[.!?]|$)/i;
@@ -415,7 +423,6 @@
     return null;
   }
   
-  // Более надежный поиск названия локации
   function locationName() {
     const el = document.querySelector("#location") || document.querySelector(".location") || document.querySelector("[class*='location']");
     if (el) return String(el.textContent || "").trim();
@@ -564,7 +571,6 @@
     return "";
   }
 
-  // Более надежный поиск ID картинки
   function typeIdFromBlob(s) {
     if (!s) return "";
     const m = String(s).match(/(?:\/|_)([0-9]+)(?:\.png|\.jpg|\?|$)/i) || String(s).match(/([0-9]+)\.png/i);
@@ -582,7 +588,6 @@
     return "";
   }
 
-  // Более надежный поиск предметов во рту
   function getMouthItems() {
     let nodes = document.querySelectorAll("#itemList .itemInMouth");
     if (!nodes.length) nodes = document.querySelectorAll(".itemInMouth");
@@ -678,7 +683,6 @@
     keep(pendingLooks, 300000);
   }
 
-  // Более надежный поиск уникального ID через осмотр
   function readThdeyId() {
     const th = document.querySelector("#thdey") || document.querySelector("[id*='thdey']");
     if (!th) return null;
@@ -779,7 +783,6 @@
 
       if (!news && !amb && pendingFinds.length === 1 && pendingNews.length === 1) {
         const only = pendingNews[0];
-        // Увеличено время ожидания с 4 до 15 секунд для мобильных устройств
         if (!state.items[only.id] && !keyOfMouthItem(only) && Math.abs(only.t - find.t) < 15000) {
           news = pendingNews.shift();
         }
@@ -932,7 +935,6 @@
     state.putLog.push({ id: String(id), key: rec.key, t: Date.now() });
     saveState();
     
-    // Проверка на корректную зону (сдача возможна только в нужной локации)
     if (zone && zone === res.zone) {
       if (res.drop) {
         let changed = false;
@@ -946,7 +948,6 @@
         return;
       }
       
-      // Обычные ресурсы
       if (!groundPending.some((g) => g.id === String(id))) {
         groundPending.push({ id: String(id), key: rec.key, t: Date.now() });
       }
@@ -1227,7 +1228,6 @@
     queueMicrotask(() => { ignoreMutations = false; });
   }
 
-  // --- ДОБАВЛЕНА КНОПКА-ТРИГГЕР ---
   const trigger = document.createElement("div");
   trigger.id = "nyTrigger";
   trigger.innerHTML = "🐚";
@@ -1517,7 +1517,6 @@
   if (cssNode) { cssNode.id = "cwNyCss"; (document.head || document.documentElement).appendChild(cssNode); }
   mount(panel);
 
-  // --- УНИВЕРСАЛЬНАЯ ПОДСКАЗКА (ПК + Мобилки) ---
   const nyTooltip = document.createElement("div");
   nyTooltip.id = "nyTooltip";
   nyTooltip.style.cssText = `
@@ -1540,7 +1539,6 @@
       nyTooltip.textContent = "Уникальный ID не определён";
     }
     nyTooltip.style.display = "block";
-    // Чтобы на телефоне подсказка не улетала за край экрана
     const w = nyTooltip.offsetWidth;
     let left = x + 12;
     if (left + w > window.innerWidth) left = x - w - 12;
@@ -1550,7 +1548,6 @@
 
   const hideTooltip = () => { nyTooltip.style.display = "none"; };
 
-  // Для ПК
   document.addEventListener("mouseover", (e) => {
     if (!e.target.closest) return;
     const tag = e.target.closest(".cw-ny-tag");
@@ -1564,12 +1561,11 @@
     if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest(".cw-ny-tag")) hideTooltip();
   });
 
-  // Для мобильных устройств (тап)
   document.addEventListener("touchstart", (e) => {
     if (!e.target.closest) return;
     const tag = e.target.closest(".cw-ny-tag");
     if (tag) {
-      e.preventDefault(); // Останавливаем зум/скролл при клике на тег
+      e.preventDefault();
       const touch = e.touches[0];
       const id = tag.getAttribute("data-cw-id");
       if (id) nyTooltip.textContent = "Уникальный ID: " + id;
@@ -1585,7 +1581,6 @@
       hideTooltip();
     }
   }, { passive: false });
-  // --------------------------------
 
   function placePanelOnScreen() {
     const w = panel.offsetWidth || 300;
@@ -1595,7 +1590,6 @@
     if (Number.isNaN(left)) left = 10;
     if (Number.isNaN(top)) top = 10;
     
-    // Не даем панели вылезти за пределы экрана
     left = Math.min(Math.max(5, left), window.innerWidth - w - 5);
     top = Math.min(Math.max(5, top), window.innerHeight - h - 5);
     
@@ -1612,7 +1606,6 @@
   } catch (e) {}
   placePanelOnScreen();
 
-  // --- ЛОГИКА СКРЫТИЯ/ПОКАЗА ПАНЕЛИ ---
   function togglePanel(show) {
     if (show === undefined) show = !ui.isOpen;
     ui.isOpen = !!show;
@@ -1628,7 +1621,6 @@
   panel.querySelector("#toggleBtn").onclick = () => togglePanel(false);
 
   if (!ui.isOpen) panel.classList.add("ny-hidden");
-  // -----------------------------------
 
   panel.querySelector("#resetBtn").onclick = () => {
     if (confirm("Сбросить лог нырков (счётчики и привязанные ID)?")) resetState();
@@ -1639,7 +1631,6 @@
     renderIdLog();
   };
 
-  // --- ПЕРЕТАСКИВАНИЕ ПАНЕЛИ (ПК + МОБИЛКИ) ---
   let drag = false, ox = 0, oy = 0;
   const header = panel.querySelector("#panelHeader");
 
@@ -1653,7 +1644,7 @@
   };
   const moveDrag = (e) => {
     if (!drag) return;
-    if (e.cancelable) e.preventDefault(); // Останавливаем скролл страницы
+    if (e.cancelable) e.preventDefault();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     panel.style.left = (clientX - ox) + "px";
@@ -1672,7 +1663,6 @@
   document.addEventListener("touchmove", moveDrag, { passive: false });
   document.addEventListener("mouseup", endDrag);
   document.addEventListener("touchend", endDrag);
-  // -----------------------------------
 
   function zoneMeta(id) { return zones.find((z) => z.id === id) || null; }
 
@@ -1715,7 +1705,6 @@
     wrap.style.height = h + "px";
   }
   
-  // --- ИЗМЕНЕНИЕ РАЗМЕРА ТАБЛИЦЫ (ПК + МОБИЛКИ) ---
   function bindTableResize() {
     if (panel.dataset.nyResize === "1") return;
     panel.dataset.nyResize = "1";
@@ -1750,7 +1739,6 @@
     document.addEventListener("mouseup", endResize);
     document.addEventListener("touchend", endResize);
   }
-  // -----------------------------------
 
   function setFolderOpen(table, key, open) {
     const folder = table.querySelector('tr.ny-folder[data-key="' + cssEscape(key) + '"]');
@@ -1897,874 +1885,870 @@
     table.querySelectorAll("tr.ny-group").forEach((el) => {
       el.addEventListener("click", (e) => {
         e.preventDefault(); e.stopPropagation();
-                    const next = el.getAttribute("data-open") !== "1";
-            el.setAttribute("data-open", next ? "1" : "0");
-            const mark = el.querySelector(".ny-zone-mark");
-            if (mark) mark.textContent = next ? "▾" : "▸";
-            const parent = el.getAttribute("data-parent") || "";
-            const gid = el.getAttribute("data-group") || "";
-            ui.groups[groupKey(parent, gid)] = next;
-            saveUi();
-            const folder = table.querySelector('tr.ny-folder[data-key="' + cssEscape(parent) + '"]');
-            const zoneOk = (() => {
-              const z = el.getAttribute("data-zone") || "";
-              const zr = table.querySelector('tr.ny-zone[data-zone="' + cssEscape(z) + '"]');
-              return !zr || zr.getAttribute("data-open") !== "0";
-            })();
-            const show = next && zoneOk && folder && folder.getAttribute("data-open") === "1";
-            table.querySelectorAll('tr.ny-child[data-parent="' + cssEscape(parent) + '"][data-group="' + cssEscape(gid) + '"]').forEach((ch) => {
-              ch.style.display = show ? "" : "none";
-            });
-          });
+        const next = el.getAttribute("data-open") !== "1";
+        el.setAttribute("data-open", next ? "1" : "0");
+        const mark = el.querySelector(".ny-zone-mark");
+        if (mark) mark.textContent = next ? "▾" : "▸";
+        const parent = el.getAttribute("data-parent") || "";
+        const gid = el.getAttribute("data-group") || "";
+        ui.groups[groupKey(parent, gid)] = next;
+        saveUi();
+        const folder = table.querySelector('tr.ny-folder[data-key="' + cssEscape(parent) + '"]');
+        const zoneOk = (() => {
+          const z = el.getAttribute("data-zone") || "";
+          const zr = table.querySelector('tr.ny-zone[data-zone="' + cssEscape(z) + '"]');
+          return !zr || zr.getAttribute("data-open") !== "0";
+        })();
+        const show = next && zoneOk && folder && folder.getAttribute("data-open") === "1";
+        table.querySelectorAll('tr.ny-child[data-parent="' + cssEscape(parent) + '"][data-group="' + cssEscape(gid) + '"]').forEach((ch) => {
+          ch.style.display = show ? "" : "none";
         });
-        table.querySelectorAll("tr.ny-group").forEach((gr) => {
-          const k = groupKey(gr.getAttribute("data-parent"), gr.getAttribute("data-group"));
-          const open = ui.groups[k] === true;
-          gr.setAttribute("data-open", open ? "1" : "0");
-          const mark = gr.querySelector(".ny-zone-mark");
-          if (mark) mark.textContent = open ? "▾" : "▸";
-        });
-        table.querySelectorAll("tr.ny-folder").forEach((fr) => {
-          const key = fr.getAttribute("data-key") || "";
-          setFolderOpen(table, key, ui.folders[key] === true);
-        });
-        table.querySelectorAll("tr.ny-zone").forEach((zr) => {
-          const zid = zr.getAttribute("data-zone") || "";
-          setZoneOpen(table, zid, ui.zones[zid] !== false);
-        });
-        applyTableHeight(loadTableHeight());
-        bindTableResize();
-        updateTable();
-      }
-
-      function renderIdLog() {
-        const box = panel.querySelector("#idLog");
-        if (!box || box.style.display !== "block") return;
-        const total = state.order.length;
-        const ordered = state.order.slice().reverse().slice(0, ID_LOG_MAX);
-        const rows = ordered.map((id) => {
-          const rec = state.items[id];
-          if (!rec) return "";
-          const res = resources.find((r) => r.key === rec.key);
-          const st = rec.status === "delivered" ? "сдано" : "найдено";
-          return `<div class="st-${escAttr(rec.status)}">${escAttr(res ? res.label : rec.key)} · <b>${escAttr(id)}</b> · ${st}</div>`;
-        }).filter(Boolean);
-        if (total > ID_LOG_MAX) rows.push(`<div class="muted">… всего ${total}</div>`);
-        box.innerHTML = rows.length ? rows.join("") : "<div>Пока нет привязанных ID</div>";
-      }
-
-      function markGot(row, delivered) {
-        if (!row) return;
-        if (delivered > 0) row.classList.add("ny-got"); else row.classList.remove("ny-got");
-      }
-
-      function updateTable() {
-        let totalScore = 0;
-        const zoneSum = {};
-        const byKey = {};
-        for (const id of state.order) {
-          const rec = state.items[id];
-          if (!rec) continue;
-          if (!byKey[rec.key]) byKey[rec.key] = [];
-          byKey[rec.key].push(rec);
-        }
-        for (const r of resources) {
-          const recs = byKey[r.key] || [];
-          const found = recs.length;
-          let delivered = 0;
-          for (const x of recs) if (x.status === "delivered") delivered++;
-          const pts = scores[r.key] || r.score || 0;
-          const total = delivered * pts;
-          totalScore += total;
-          const zid = r.zone || "_other";
-          if (!zoneSum[zid]) zoneSum[zid] = { found: 0, delivered: 0, score: 0 };
-          zoneSum[zid].found += found;
-          zoneSum[zid].delivered += delivered;
-          zoneSum[zid].score += total;
-          const row = panel.querySelector('#resourceTable tr[data-key="' + cssEscape(r.key) + '"]');
-          if (row) {
-            row.querySelector(".found").textContent = found;
-            row.querySelector(".delivered").textContent = delivered;
-            row.querySelector(".score").textContent = total;
-            markGot(row, delivered);
-          }
-          if (r.isFolder) {
-            const used = {};
-            for (const rec of recs) {
-              const sk = recSubKey(rec, r);
-              if (!used[sk]) used[sk] = { found: 0, delivered: 0 };
-              used[sk].found += 1;
-              if (rec.status === "delivered") used[sk].delivered += 1;
-            }
-            (r.parts || []).forEach((part, i) => {
-              const sk = subKeyOf(part, i);
-              const st = used[sk] || { found: 0, delivered: 0 };
-              const ch = panel.querySelector('#resourceTable tr.ny-child[data-parent="' + cssEscape(r.key) + '"][data-sub="' + cssEscape(sk) + '"]');
-              if (!ch) return;
-              ch.querySelector(".found").textContent = st.found;
-              ch.querySelector(".delivered").textContent = st.delivered;
-              ch.querySelector(".score").textContent = st.delivered * pts;
-              markGot(ch, st.delivered);
-            });
-          }
-        }
-        for (const [zid, sum] of Object.entries(zoneSum)) {
-          const zr = panel.querySelector('#resourceTable tr.ny-zone[data-zone="' + cssEscape(zid) + '"]');
-          if (!zr) continue;
-          zr.querySelector(".found").textContent = sum.found;
-          zr.querySelector(".delivered").textContent = sum.delivered;
-          zr.querySelector(".score").textContent = sum.score;
-          markGot(zr, sum.delivered);
-        }
-        const scoreEl = panel.querySelector("#totalScore");
-        if (scoreEl) scoreEl.textContent = totalScore;
-        renderIdLog();
-      }
-
-      renderResourceRows();
-
-      let authorOk = false;
-      let failN = 0;
-      let draft = { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES), allowedTribe: BUILTIN_TRIBE };
-      let focusCat = 0;
-
-      async function acceptKey(raw) {
-        const h = await digest(String(raw) + _S);
-        const extra = localStorage.getItem(_PK);
-        return extra ? h === extra : h === _K;
-      }
-
-      function loadDraft() {
-        try {
-          const raw = JSON.parse(localStorage.getItem(_CK) || "null");
-          if (raw && Array.isArray(raw.categories) && Array.isArray(raw.zones)) {
-            if (raw.allowedTribe == null) raw.allowedTribe = BUILTIN_TRIBE;
-            return raw;
-          }
-        } catch (e) {}
-        return { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES), allowedTribe: BUILTIN_TRIBE };
-      }
-      function saveDraft() { localStorage.setItem(_CK, JSON.stringify(draft)); }
-
-      function applyDraftLive() {
-        compileConfig(draft.categories, draft.zones);
-        const tset = String(draft.allowedTribe || "").trim();
-        allowedTribe = looksLocked(tset) ? tset : BUILTIN_TRIBE;
-        renderResourceRows();
-        if (authorOk) reviveScript(); else enforceTribe();
-        const hist = document.querySelector("#ist");
-        if (hist && scriptAlive) paintHistory(hist);
-        if (!looksLocked(tset) && tset) {
-          stMsg("племя применится после экспорта в новую версию скрипта");
-        }
-      }
-
-      const gate = document.createElement("div");
-      gate.id = "nyGate";
-      gate.hidden = true;
-      gate.style.display = "none";
-      gate.innerHTML = `
-        <div class="box">
-          <div>Ключ доступа</div>
-          <input id="nyKey" type="password" autocomplete="off">
-          <div style="display:flex;gap:6px;justify-content:flex-end">
-            <button type="button" id="nyKeyNo">Закрыть</button>
-            <button type="button" id="nyKeyOk">ОК</button>
-          </div>
-          <div id="nyKeyErr" class="muted" style="margin-top:6px;color:#f88"></div>
-        </div>`;
-      mount(gate);
-
-      function openGate() {
-        if (authorOk) { openStudio(); return; }
-        if (failN >= 6) return;
-        gate.hidden = false;
-        gate.style.display = "flex";
-        const inp = gate.querySelector("#nyKey");
-        gate.querySelector("#nyKeyErr").textContent = "";
-        inp.value = "";
-        setTimeout(() => inp.focus(), 30);
-      }
-
-      gate.querySelector("#nyKeyNo").onclick = () => { gate.style.display = "none"; gate.hidden = true; };
-      gate.addEventListener("click", (e) => { if (e.target === gate) gate.style.display = "none"; });
-      gate.querySelector("#nyKeyOk").onclick = submitKey;
-      gate.querySelector("#nyKey").addEventListener("keydown", (e) => { if (e.key === "Enter") submitKey(); });
-
-      async function submitKey() {
-        const inp = gate.querySelector("#nyKey");
-        const err = gate.querySelector("#nyKeyErr");
-        if (failN >= 6) { err.textContent = "закрыто"; return; }
-        const ok = await acceptKey(inp.value);
-        inp.value = "";
-        if (!ok) { failN++; err.textContent = "нет"; return; }
-        failN = 0;
-        authorOk = true;
-        gate.style.display = "none";
-        gate.hidden = true;
-        draft = loadDraft();
-        reviveScript();
-        openStudio();
-      }
-
-      panel.querySelector("#nyTitle").addEventListener("click", (e) => {
-        if (e.shiftKey && e.altKey) { e.preventDefault(); e.stopPropagation(); openGate(); }
       });
-      
-      // На телефонах триггер админки: долгий тап по заголовку
-      let titlePressTimer;
-      panel.querySelector("#nyTitle").addEventListener("touchstart", (e) => {
-        titlePressTimer = setTimeout(() => {
-          e.preventDefault();
-          openGate();
-        }, 800);
-      }, { passive: false });
-      panel.querySelector("#nyTitle").addEventListener("touchend", () => clearTimeout(titlePressTimer));
-      panel.querySelector("#nyTitle").addEventListener("touchmove", () => clearTimeout(titlePressTimer));
+    });
+    table.querySelectorAll("tr.ny-group").forEach((gr) => {
+      const k = groupKey(gr.getAttribute("data-parent"), gr.getAttribute("data-group"));
+      const open = ui.groups[k] === true;
+      gr.setAttribute("data-open", open ? "1" : "0");
+      const mark = gr.querySelector(".ny-zone-mark");
+      if (mark) mark.textContent = open ? "▾" : "▸";
+    });
+    table.querySelectorAll("tr.ny-folder").forEach((fr) => {
+      const key = fr.getAttribute("data-key") || "";
+      setFolderOpen(table, key, ui.folders[key] === true);
+    });
+    table.querySelectorAll("tr.ny-zone").forEach((zr) => {
+      const zid = zr.getAttribute("data-zone") || "";
+      setZoneOpen(table, zid, ui.zones[zid] !== false);
+    });
+    applyTableHeight(loadTableHeight());
+    bindTableResize();
+    updateTable();
+  }
 
-      const studio = document.createElement("div");
-      studio.id = "nyStudio";
-      studio.hidden = true;
-      studio.style.display = "none";
-      studio.innerHTML = `
-        <div class="st-head">
-          <b>Схема добычи</b>
-          <button type="button" id="nyStClose">×</button>
-        </div>
-        <div class="st-body">
-          <h3>Кто может пользоваться</h3>
-          <div class="row">
-            <span class="muted">Племя, как на странице кошки</span>
-            <input id="nyTribe" type="text" placeholder="как на странице кошки" autocomplete="off">
-          </div>
-          <div class="muted">В код попадёт ключ, не название. Пустое поле — оставить как было.</div>
-          <div class="muted" id="nyTribeRead" style="margin-bottom:8px"></div>
-          <h3>Куда относить</h3>
-          <div id="nyZones"></div>
-          <div class="row">
-            <input id="nyZoneName" type="text" placeholder="Название локации как в игре">
-            <button type="button" id="nyZoneAdd">+ локация</button>
-          </div>
-          <h3>Что ловится и к чему относится</h3>
-          <div class="row">
-            <button type="button" id="nyCatAdd">+ категория</button>
-            <span class="muted">Категория = строка в таблице лога. Внутри неё — все названия из истории и неуникальные ID.</span>
-          </div>
-          <div id="nyCats"></div>
-          <h3>Сейчас во рту — клик добавит type ID в выбранную категорию</h3>
-          <div id="nyMouth" class="chips"></div>
-        </div>
-        <div class="st-foot">
-          <button type="button" class="ok" id="nySave">Сохранить</button>
-          <button type="button" id="nyExport">Экспорт</button>
-          <button type="button" id="nyRevert">Сбросить</button>
-          <button type="button" id="nyPw">Сменить ключ</button>
-          <button type="button" id="nyPwReset">× ключ</button>
-          <span id="nyStMsg" class="muted"></span>
-        </div>`;
-      mount(studio);
+  function renderIdLog() {
+    const box = panel.querySelector("#idLog");
+    if (!box || box.style.display !== "block") return;
+    const total = state.order.length;
+    const ordered = state.order.slice().reverse().slice(0, ID_LOG_MAX);
+    const rows = ordered.map((id) => {
+      const rec = state.items[id];
+      if (!rec) return "";
+      const res = resources.find((r) => r.key === rec.key);
+      const st = rec.status === "delivered" ? "сдано" : "найдено";
+      return `<div class="st-${escAttr(rec.status)}">${escAttr(res ? res.label : rec.key)} · <b>${escAttr(id)}</b> · ${st}</div>`;
+    }).filter(Boolean);
+    if (total > ID_LOG_MAX) rows.push(`<div class="muted">… всего ${total}</div>`);
+    box.innerHTML = rows.length ? rows.join("") : "<div>Пока нет привязанных ID</div>";
+  }
 
-      // --- ПЕРЕТАСКИВАНИЕ СТУДИИ (ПК + МОБИЛКИ) ---
-      let stDrag = false, stx = 0, sty = 0;
-      const stHead = studio.querySelector(".st-head");
-      const startStDrag = (e) => {
-        if (e.target.tagName === "BUTTON") return;
-        stDrag = true;
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        const rect = studio.getBoundingClientRect();
-        stx = clientX - rect.left;
-        sty = clientY - rect.top;
-        // Переопределяем позиционирование с transform на absolute для мобилок
-        studio.style.transform = "none";
-        studio.style.left = rect.left + "px";
-        studio.style.top = rect.top + "px";
-      };
-      const moveStDrag = (e) => {
-        if (!stDrag) return;
-        if (e.cancelable) e.preventDefault();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        studio.style.left = Math.max(0, Math.min(window.innerWidth - studio.offsetWidth, clientX - stx)) + "px";
-        studio.style.top = Math.max(0, Math.min(window.innerHeight - 50, clientY - sty)) + "px";
-      };
-      const endStDrag = () => { stDrag = false; };
+  function markGot(row, delivered) {
+    if (!row) return;
+    if (delivered > 0) row.classList.add("ny-got"); else row.classList.remove("ny-got");
+  }
 
-      stHead.addEventListener("mousedown", startStDrag);
-      stHead.addEventListener("touchstart", startStDrag, { passive: false });
-      document.addEventListener("mousemove", moveStDrag);
-      document.addEventListener("touchmove", moveStDrag, { passive: false });
-      document.addEventListener("mouseup", endStDrag);
-      document.addEventListener("touchend", endStDrag);
-      // -----------------------------------
-
-      studio.querySelector("#nyStClose").onclick = () => { studio.style.display = "none"; };
-
-      function stMsg(t) { const el = studio.querySelector("#nyStMsg"); if (el) el.textContent = t || ""; }
-
-      function openStudio() {
-        if (!authorOk) return;
-        studio.hidden = false;
-        studio.style.display = "flex";
-        drawStudio();
-        refreshMouthChips();
+  function updateTable() {
+    let totalScore = 0;
+    const zoneSum = {};
+    const byKey = {};
+    for (const id of state.order) {
+      const rec = state.items[id];
+      if (!rec) continue;
+      if (!byKey[rec.key]) byKey[rec.key] = [];
+      byKey[rec.key].push(rec);
+    }
+    for (const r of resources) {
+      const recs = byKey[r.key] || [];
+      const found = recs.length;
+      let delivered = 0;
+      for (const x of recs) if (x.status === "delivered") delivered++;
+      const pts = scores[r.key] || r.score || 0;
+      const total = delivered * pts;
+      totalScore += total;
+      const zid = r.zone || "_other";
+      if (!zoneSum[zid]) zoneSum[zid] = { found: 0, delivered: 0, score: 0 };
+      zoneSum[zid].found += found;
+      zoneSum[zid].delivered += delivered;
+      zoneSum[zid].score += total;
+      const row = panel.querySelector('#resourceTable tr[data-key="' + cssEscape(r.key) + '"]');
+      if (row) {
+        row.querySelector(".found").textContent = found;
+        row.querySelector(".delivered").textContent = delivered;
+        row.querySelector(".score").textContent = total;
+        markGot(row, delivered);
       }
+      if (r.isFolder) {
+        const used = {};
+        for (const rec of recs) {
+          const sk = recSubKey(rec, r);
+          if (!used[sk]) used[sk] = { found: 0, delivered: 0 };
+          used[sk].found += 1;
+          if (rec.status === "delivered") used[sk].delivered += 1;
+        }
+        (r.parts || []).forEach((part, i) => {
+          const sk = subKeyOf(part, i);
+          const st = used[sk] || { found: 0, delivered: 0 };
+          const ch = panel.querySelector('#resourceTable tr.ny-child[data-parent="' + cssEscape(r.key) + '"][data-sub="' + cssEscape(sk) + '"]');
+          if (!ch) return;
+          ch.querySelector(".found").textContent = st.found;
+          ch.querySelector(".delivered").textContent = st.delivered;
+          ch.querySelector(".score").textContent = st.delivered * pts;
+          markGot(ch, st.delivered);
+        });
+      }
+    }
+    for (const [zid, sum] of Object.entries(zoneSum)) {
+      const zr = panel.querySelector('#resourceTable tr.ny-zone[data-zone="' + cssEscape(zid) + '"]');
+      if (!zr) continue;
+      zr.querySelector(".found").textContent = sum.found;
+      zr.querySelector(".delivered").textContent = sum.delivered;
+      zr.querySelector(".score").textContent = sum.score;
+      markGot(zr, sum.delivered);
+    }
+    const scoreEl = panel.querySelector("#totalScore");
+    if (scoreEl) scoreEl.textContent = totalScore;
+    renderIdLog();
+  }
 
-      function drawStudio() {
-        const tribeInp = studio.querySelector("#nyTribe");
-        if (tribeInp) {
-          const raw = String(draft.allowedTribe || "").trim();
-          tribeInp.value = looksLocked(raw) ? "" : raw;
-        }
-        const readEl = studio.querySelector("#nyTribeRead");
-        if (readEl) {
-          readEl.textContent = lastReadTribe
-            ? ("С главной страницы сейчас: " + lastReadTribe)
-            : "С главной страницы племя не прочиталось.";
-        }
-        const zbox = studio.querySelector("#nyZones");
-        zbox.innerHTML = draft.zones.map((z, i) => `
-          <span class="zone-pill">
-            <input type="text" data-zi="${i}" value="${escAttr(z.name)}" style="flex:1; min-width:120px;">
-            <button type="button" data-zd="${i}" class="danger">×</button>
-          </span>`).join("");
-        zbox.querySelectorAll("input[data-zi]").forEach((inp) => {
-          inp.onchange = () => {
-            const i = +inp.dataset.zi;
-            draft.zones[i].name = inp.value.trim();
-            if (!draft.zones[i].id) draft.zones[i].id = "z" + Date.now();
-            drawCats();
-          };
-        });
-        zbox.querySelectorAll("button[data-zd]").forEach((btn) => {
-          btn.onclick = () => {
-            const i = +btn.dataset.zd;
-            const id = draft.zones[i].id;
-            if (draft.categories.some((c) => c.zone === id) && !confirm("Локация используется в категориях. Удалить?")) return;
-            draft.zones.splice(i, 1);
-            drawStudio();
-          };
-        });
+  renderResourceRows();
+
+  let authorOk = false;
+  let failN = 0;
+  let draft = { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES), allowedTribe: BUILTIN_TRIBE };
+  let focusCat = 0;
+
+  async function acceptKey(raw) {
+    const h = await digest(String(raw) + _S);
+    const extra = localStorage.getItem(_PK);
+    return extra ? h === extra : h === _K;
+  }
+
+  function loadDraft() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(_CK) || "null");
+      if (raw && Array.isArray(raw.categories) && Array.isArray(raw.zones)) {
+        if (raw.allowedTribe == null) raw.allowedTribe = BUILTIN_TRIBE;
+        return raw;
+      }
+    } catch (e) {}
+    return { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES), allowedTribe: BUILTIN_TRIBE };
+  }
+  function saveDraft() { localStorage.setItem(_CK, JSON.stringify(draft)); }
+
+  function applyDraftLive() {
+    compileConfig(draft.categories, draft.zones);
+    const tset = String(draft.allowedTribe || "").trim();
+    allowedTribe = looksLocked(tset) ? tset : BUILTIN_TRIBE;
+    renderResourceRows();
+    if (authorOk) reviveScript(); else enforceTribe();
+    const hist = document.querySelector("#ist");
+    if (hist && scriptAlive) paintHistory(hist);
+    if (!looksLocked(tset) && tset) {
+      stMsg("племя применится после экспорта в новую версию скрипта");
+    }
+  }
+
+  const gate = document.createElement("div");
+  gate.id = "nyGate";
+  gate.hidden = true;
+  gate.style.display = "none";
+  gate.innerHTML = `
+    <div class="box">
+      <div>Ключ доступа</div>
+      <input id="nyKey" type="password" autocomplete="off">
+      <div style="display:flex;gap:6px;justify-content:flex-end">
+        <button type="button" id="nyKeyNo">Закрыть</button>
+        <button type="button" id="nyKeyOk">ОК</button>
+      </div>
+      <div id="nyKeyErr" class="muted" style="margin-top:6px;color:#f88"></div>
+    </div>`;
+  mount(gate);
+
+  function openGate() {
+    if (authorOk) { openStudio(); return; }
+    if (failN >= 6) return;
+    gate.hidden = false;
+    gate.style.display = "flex";
+    const inp = gate.querySelector("#nyKey");
+    gate.querySelector("#nyKeyErr").textContent = "";
+    inp.value = "";
+    setTimeout(() => inp.focus(), 30);
+  }
+
+  gate.querySelector("#nyKeyNo").onclick = () => { gate.style.display = "none"; gate.hidden = true; };
+  gate.addEventListener("click", (e) => { if (e.target === gate) gate.style.display = "none"; });
+  gate.querySelector("#nyKeyOk").onclick = submitKey;
+  gate.querySelector("#nyKey").addEventListener("keydown", (e) => { if (e.key === "Enter") submitKey(); });
+
+  async function submitKey() {
+    const inp = gate.querySelector("#nyKey");
+    const err = gate.querySelector("#nyKeyErr");
+    if (failN >= 6) { err.textContent = "закрыто"; return; }
+    const ok = await acceptKey(inp.value);
+    inp.value = "";
+    if (!ok) { failN++; err.textContent = "нет"; return; }
+    failN = 0;
+    authorOk = true;
+    gate.style.display = "none";
+    gate.hidden = true;
+    draft = loadDraft();
+    reviveScript();
+    openStudio();
+  }
+
+  panel.querySelector("#nyTitle").addEventListener("click", (e) => {
+    if (e.shiftKey && e.altKey) { e.preventDefault(); e.stopPropagation(); openGate(); }
+  });
+  
+  let titlePressTimer;
+  panel.querySelector("#nyTitle").addEventListener("touchstart", (e) => {
+    titlePressTimer = setTimeout(() => {
+      e.preventDefault();
+      openGate();
+    }, 800);
+  }, { passive: false });
+  panel.querySelector("#nyTitle").addEventListener("touchend", () => clearTimeout(titlePressTimer));
+  panel.querySelector("#nyTitle").addEventListener("touchmove", () => clearTimeout(titlePressTimer));
+
+  const studio = document.createElement("div");
+  studio.id = "nyStudio";
+  studio.hidden = true;
+  studio.style.display = "none";
+  studio.innerHTML = `
+    <div class="st-head">
+      <b>Схема добычи</b>
+      <button type="button" id="nyStClose">×</button>
+    </div>
+    <div class="st-body">
+      <h3>Кто может пользоваться</h3>
+      <div class="row">
+        <span class="muted">Племя, как на странице кошки</span>
+        <input id="nyTribe" type="text" placeholder="как на странице кошки" autocomplete="off">
+      </div>
+      <div class="muted">В код попадёт ключ, не название. Пустое поле — оставить как было.</div>
+      <div class="muted" id="nyTribeRead" style="margin-bottom:8px"></div>
+      <h3>Куда относить</h3>
+      <div id="nyZones"></div>
+      <div class="row">
+        <input id="nyZoneName" type="text" placeholder="Название локации как в игре">
+        <button type="button" id="nyZoneAdd">+ локация</button>
+      </div>
+      <h3>Что ловится и к чему относится</h3>
+      <div class="row">
+        <button type="button" id="nyCatAdd">+ категория</button>
+        <span class="muted">Категория = строка в таблице лога. Внутри неё — все названия из истории и неуникальные ID.</span>
+      </div>
+      <div id="nyCats"></div>
+      <h3>Сейчас во рту — клик добавит type ID в выбранную категорию</h3>
+      <div id="nyMouth" class="chips"></div>
+    </div>
+    <div class="st-foot">
+      <button type="button" class="ok" id="nySave">Сохранить</button>
+      <button type="button" id="nyExport">Экспорт</button>
+      <button type="button" id="nyRevert">Сбросить</button>
+      <button type="button" id="nyPw">Сменить ключ</button>
+      <button type="button" id="nyPwReset">× ключ</button>
+      <span id="nyStMsg" class="muted"></span>
+    </div>`;
+  mount(studio);
+
+  let stDrag = false, stx = 0, sty = 0;
+  const stHead = studio.querySelector(".st-head");
+  const startStDrag = (e) => {
+    if (e.target.tagName === "BUTTON") return;
+    stDrag = true;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const rect = studio.getBoundingClientRect();
+    stx = clientX - rect.left;
+    sty = clientY - rect.top;
+    studio.style.transform = "none";
+    studio.style.left = rect.left + "px";
+    studio.style.top = rect.top + "px";
+  };
+  const moveStDrag = (e) => {
+    if (!stDrag) return;
+    if (e.cancelable) e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    studio.style.left = Math.max(0, Math.min(window.innerWidth - studio.offsetWidth, clientX - stx)) + "px";
+    studio.style.top = Math.max(0, Math.min(window.innerHeight - 50, clientY - sty)) + "px";
+  };
+  const endStDrag = () => { stDrag = false; };
+
+  stHead.addEventListener("mousedown", startStDrag);
+  stHead.addEventListener("touchstart", startStDrag, { passive: false });
+  document.addEventListener("mousemove", moveStDrag);
+  document.addEventListener("touchmove", moveStDrag, { passive: false });
+  document.addEventListener("mouseup", endStDrag);
+  document.addEventListener("touchend", endStDrag);
+
+  studio.querySelector("#nyStClose").onclick = () => { studio.style.display = "none"; };
+
+  function stMsg(t) { const el = studio.querySelector("#nyStMsg"); if (el) el.textContent = t || ""; }
+
+  function openStudio() {
+    if (!authorOk) return;
+    studio.hidden = false;
+    studio.style.display = "flex";
+    drawStudio();
+    refreshMouthChips();
+  }
+
+  function drawStudio() {
+    const tribeInp = studio.querySelector("#nyTribe");
+    if (tribeInp) {
+      const raw = String(draft.allowedTribe || "").trim();
+      tribeInp.value = looksLocked(raw) ? "" : raw;
+    }
+    const readEl = studio.querySelector("#nyTribeRead");
+    if (readEl) {
+      readEl.textContent = lastReadTribe
+        ? ("С главной страницы сейчас: " + lastReadTribe)
+        : "С главной страницы племя не прочиталось.";
+    }
+    const zbox = studio.querySelector("#nyZones");
+    zbox.innerHTML = draft.zones.map((z, i) => `
+      <span class="zone-pill">
+        <input type="text" data-zi="${i}" value="${escAttr(z.name)}" style="flex:1; min-width:120px;">
+        <button type="button" data-zd="${i}" class="danger">×</button>
+      </span>`).join("");
+    zbox.querySelectorAll("input[data-zi]").forEach((inp) => {
+      inp.onchange = () => {
+        const i = +inp.dataset.zi;
+        draft.zones[i].name = inp.value.trim();
+        if (!draft.zones[i].id) draft.zones[i].id = "z" + Date.now();
         drawCats();
-      }
+      };
+    });
+    zbox.querySelectorAll("button[data-zd]").forEach((btn) => {
+      btn.onclick = () => {
+        const i = +btn.dataset.zd;
+        const id = draft.zones[i].id;
+        if (draft.categories.some((c) => c.zone === id) && !confirm("Локация используется в категориях. Удалить?")) return;
+        draft.zones.splice(i, 1);
+        drawStudio();
+      };
+    });
+    drawCats();
+  }
 
-      function zoneOptions(selected) {
-        return draft.zones.map((z) =>
-          `<option value="${escAttr(z.id)}" ${z.id === selected ? "selected" : ""}>${escAttr(z.name)}</option>`
-        ).join("");
-      }
+  function zoneOptions(selected) {
+    return draft.zones.map((z) =>
+      `<option value="${escAttr(z.id)}" ${z.id === selected ? "selected" : ""}>${escAttr(z.name)}</option>`
+    ).join("");
+  }
 
-      function folderOn(c) { return c.folder === true || (c.folder !== false && (c.items || []).length > 1); }
+  function folderOn(c) { return c.folder === true || (c.folder !== false && (c.items || []).length > 1); }
 
-      function drawCats() {
-        const box = studio.querySelector("#nyCats");
-        box.innerHTML = draft.categories.map((c, ci) => {
-          const asFolder = folderOn(c);
-          const foldImg = catCustomImg(c);
-          const firstTid = ((c.items || []).map((i) => i.typeId).find(Boolean)) || "0";
-          const foldPrev = foldImg || thingImg(firstTid);
-          return `
-          <div class="card ${ci === focusCat ? "active" : ""}" data-ci="${ci}">
-            <div class="card-top">
-              <label class="muted">в таблице</label>
-              <input type="text" data-f="label" value="${escAttr(c.label)}" placeholder="Крепкая ветка" style="flex:1;">
-              <label class="muted">сдавать в</label>
-              <select data-f="zone">${zoneOptions(c.zone)}</select>
-              <label class="muted">баллы</label>
-              <input type="number" data-f="score" value="${Number(c.score) || 0}" style="width:64px">
-              <span class="muted">ключ: ${escAttr(c.key || "")}</span>
-              <label class="muted"><input type="checkbox" data-f="folder"${asFolder ? " checked" : ""}> папка</label>
-              <label class="muted"><input type="checkbox" data-f="drop"${c.drop ? " checked" : ""}> камень</label>
-              <button type="button" class="danger" data-cdel="${ci}">удалить</button>
-            </div>
-            <div class="row ny-folder-img" style="margin:6px 0;${asFolder ? "" : "display:none"}">
-              <span class="muted">картинка папки</span>
-              <input type="text" data-f="img" value="${escAttr(foldImg)}" placeholder="https://… ссылка на свою картинку" style="flex:1; min-width:200px;">
-              <img class="ny-folder-preview" src="${escAttr(foldPrev)}" alt="">
-            </div>
-            <div class="ny-subfolds" style="margin:6px 0;${asFolder ? "" : "display:none"}">
-              <div class="muted" style="margin-bottom:4px">Подпапки внутри (раскрывающийся блок в логе)</div>
-              ${(c.groups || []).map((g, gi) => `
-              <div class="row">
-                <input type="text" data-gi="${gi}" value="${escAttr(g)}" placeholder="Крылатое племя" style="flex:1;">
-                <button type="button" class="danger" data-gdel="${gi}">×</button>
-              </div>`).join("")}
-              <div class="row"><button type="button" data-gadd="${ci}">+ подпапка</button></div>
-            </div>
-            <div class="muted" style="margin:4px 0 2px">«Как в истории» — Обнаружил …. «В таблице» — как показать в логе. «Камень» — сдаётся, если просто положили в нужной локации.</div>
-            <table class="items">
-              <tr><td>Как в истории</td><td>В таблице</td><td>Подпапка</td><td>Неуникальный ID</td><td></td><td></td></tr>
-              ${(c.items || []).map((it, ii) => `
-                <tr>
-                  <td><input type="text" data-in="${ii}" data-f="name" value="${escAttr(it.name)}" placeholder="крепкую ветку"></td>
-                  <td><input type="text" data-in="${ii}" data-f="label" value="${escAttr(it.label || "")}" placeholder="Крепкая ветка"></td>
-                  <td style="min-width:100px">
-                    <select data-in="${ii}" data-f="group">
-                      <option value="">—</option>
-                      ${(c.groups || []).map((g) => `<option value="${escAttr(g)}"${String(it.group || "") === String(g) ? " selected" : ""}>${escAttr(g)}</option>`).join("")}
-                    </select>
-                  </td>
-                  <td style="min-width:60px"><input type="text" data-in="${ii}" data-f="typeId" value="${escAttr(it.typeId)}" placeholder="75"></td>
-                  <td style="width:36px"><img src="${thingImg(it.typeId || "0")}" alt=""></td>
-                  <td style="width:28px"><button type="button" class="danger" data-idel="${ii}">×</button></td>
-                </tr>`).join("")}
-            </table>
-            <div class="row" style="margin-top:6px">
-              <button type="button" data-iadd="${ci}">+ предмет</button>
-            </div>
-          </div>`;
-        }).join("");
+  function drawCats() {
+    const box = studio.querySelector("#nyCats");
+    box.innerHTML = draft.categories.map((c, ci) => {
+      const asFolder = folderOn(c);
+      const foldImg = catCustomImg(c);
+      const firstTid = ((c.items || []).map((i) => i.typeId).find(Boolean)) || "0";
+      const foldPrev = foldImg || thingImg(firstTid);
+      return `
+      <div class="card ${ci === focusCat ? "active" : ""}" data-ci="${ci}">
+        <div class="card-top">
+          <label class="muted">в таблице</label>
+          <input type="text" data-f="label" value="${escAttr(c.label)}" placeholder="Крепкая ветка" style="flex:1;">
+          <label class="muted">сдавать в</label>
+          <select data-f="zone">${zoneOptions(c.zone)}</select>
+          <label class="muted">баллы</label>
+          <input type="number" data-f="score" value="${Number(c.score) || 0}" style="width:64px">
+          <span class="muted">ключ: ${escAttr(c.key || "")}</span>
+          <label class="muted"><input type="checkbox" data-f="folder"${asFolder ? " checked" : ""}> папка</label>
+          <label class="muted"><input type="checkbox" data-f="drop"${c.drop ? " checked" : ""}> камень</label>
+          <button type="button" class="danger" data-cdel="${ci}">удалить</button>
+        </div>
+        <div class="row ny-folder-img" style="margin:6px 0;${asFolder ? "" : "display:none"}">
+          <span class="muted">картинка папки</span>
+          <input type="text" data-f="img" value="${escAttr(foldImg)}" placeholder="https://… ссылка на свою картинку" style="flex:1; min-width:200px;">
+          <img class="ny-folder-preview" src="${escAttr(foldPrev)}" alt="">
+        </div>
+        <div class="ny-subfolds" style="margin:6px 0;${asFolder ? "" : "display:none"}">
+          <div class="muted" style="margin-bottom:4px">Подпапки внутри (раскрывающийся блок в логе)</div>
+          ${(c.groups || []).map((g, gi) => `
+          <div class="row">
+            <input type="text" data-gi="${gi}" value="${escAttr(g)}" placeholder="Крылатое племя" style="flex:1;">
+            <button type="button" class="danger" data-gdel="${gi}">×</button>
+          </div>`).join("")}
+          <div class="row"><button type="button" data-gadd="${ci}">+ подпапка</button></div>
+        </div>
+        <div class="muted" style="margin:4px 0 2px">«Как в истории» — Обнаружил …. «В таблице» — как показать в логе. «Камень» — сдаётся, если просто положили в нужной локации.</div>
+        <table class="items">
+          <tr><td>Как в истории</td><td>В таблице</td><td>Подпапка</td><td>Неуникальный ID</td><td></td><td></td></tr>
+          ${(c.items || []).map((it, ii) => `
+            <tr>
+              <td><input type="text" data-in="${ii}" data-f="name" value="${escAttr(it.name)}" placeholder="крепкую ветку"></td>
+              <td><input type="text" data-in="${ii}" data-f="label" value="${escAttr(it.label || "")}" placeholder="Крепкая ветка"></td>
+              <td style="min-width:100px">
+                <select data-in="${ii}" data-f="group">
+                  <option value="">—</option>
+                  ${(c.groups || []).map((g) => `<option value="${escAttr(g)}"${String(it.group || "") === String(g) ? " selected" : ""}>${escAttr(g)}</option>`).join("")}
+                </select>
+              </td>
+              <td style="min-width:60px"><input type="text" data-in="${ii}" data-f="typeId" value="${escAttr(it.typeId)}" placeholder="75"></td>
+              <td style="width:36px"><img src="${thingImg(it.typeId || "0")}" alt=""></td>
+              <td style="width:28px"><button type="button" class="danger" data-idel="${ii}">×</button></td>
+            </tr>`).join("")}
+        </table>
+        <div class="row" style="margin-top:6px">
+          <button type="button" data-iadd="${ci}">+ предмет</button>
+        </div>
+      </div>`;
+    }).join("");
 
-        box.querySelectorAll(".card").forEach((card) => {
-          const ci = +card.dataset.ci;
-          card.addEventListener("mousedown", () => { focusCat = ci; });
-          card.addEventListener("touchstart", () => { focusCat = ci; }, { passive: true });
-          card.querySelectorAll("[data-f]").forEach((el) => {
-            const apply = () => {
-              const f = el.dataset.f;
-              if (el.dataset.in != null) {
-                const ii = +el.dataset.in;
-                draft.categories[ci].items[ii][f] = el.value;
-                if (f === "typeId") {
-                  const img = el.closest("tr").querySelector("img");
-                  if (img) img.src = thingImg(el.value.trim());
-                }
-                if (f === "name" && !draft.categories[ci].key) draft.categories[ci].key = el.value.trim();
-              } else if (f === "folder") {
-                draft.categories[ci].folder = !!el.checked;
-                const row = card.querySelector(".ny-folder-img");
-                if (row) row.style.display = el.checked ? "flex" : "none";
-                const sf = card.querySelector(".ny-subfolds");
-                if (sf) sf.style.display = el.checked ? "" : "none";
-              } else if (f === "drop") {
-                draft.categories[ci].drop = !!el.checked;
-              } else if (f === "score") {
-                draft.categories[ci][f] = Number(el.value) || 0;
-              } else {
-                draft.categories[ci][f] = el.value;
-                if (f === "img") {
-                  const prev = card.querySelector(".ny-folder-preview");
-                  const tid = ((draft.categories[ci].items || []).map((i) => i.typeId).find(Boolean)) || "0";
-                  if (prev) prev.src = String(el.value || "").trim() || thingImg(tid);
-                }
-              }
-            };
-            el.addEventListener("change", apply);
-            el.addEventListener("input", apply);
-          });
-          const delC = card.querySelector("[data-cdel]");
-          if (delC) {
-            delC.onclick = () => {
-              draft.categories.splice(ci, 1);
-              if (focusCat >= draft.categories.length) focusCat = Math.max(0, draft.categories.length - 1);
-              drawCats();
-            };
+    box.querySelectorAll(".card").forEach((card) => {
+      const ci = +card.dataset.ci;
+      card.addEventListener("mousedown", () => { focusCat = ci; });
+      card.addEventListener("touchstart", () => { focusCat = ci; }, { passive: true });
+      card.querySelectorAll("[data-f]").forEach((el) => {
+        const apply = () => {
+          const f = el.dataset.f;
+          if (el.dataset.in != null) {
+            const ii = +el.dataset.in;
+            draft.categories[ci].items[ii][f] = el.value;
+            if (f === "typeId") {
+              const img = el.closest("tr").querySelector("img");
+              if (img) img.src = thingImg(el.value.trim());
+            }
+            if (f === "name" && !draft.categories[ci].key) draft.categories[ci].key = el.value.trim();
+          } else if (f === "folder") {
+            draft.categories[ci].folder = !!el.checked;
+            const row = card.querySelector(".ny-folder-img");
+            if (row) row.style.display = el.checked ? "flex" : "none";
+            const sf = card.querySelector(".ny-subfolds");
+            if (sf) sf.style.display = el.checked ? "" : "none";
+          } else if (f === "drop") {
+            draft.categories[ci].drop = !!el.checked;
+          } else if (f === "score") {
+            draft.categories[ci][f] = Number(el.value) || 0;
+          } else {
+            draft.categories[ci][f] = el.value;
+            if (f === "img") {
+              const prev = card.querySelector(".ny-folder-preview");
+              const tid = ((draft.categories[ci].items || []).map((i) => i.typeId).find(Boolean)) || "0";
+              if (prev) prev.src = String(el.value || "").trim() || thingImg(tid);
+            }
           }
-          card.querySelectorAll("[data-idel]").forEach((btn) => {
-            btn.onclick = () => { draft.categories[ci].items.splice(+btn.dataset.idel, 1); drawCats(); };
-          });
-        });
-        box.querySelectorAll("input[data-gi]").forEach((inp) => {
-          const card = inp.closest(".card");
-          const ci = card ? +card.dataset.ci : -1;
-          inp.onchange = () => {
-            if (ci < 0 || !draft.categories[ci]) return;
-            if (!draft.categories[ci].groups) draft.categories[ci].groups = [];
-            const gi = +inp.dataset.gi;
-            const old = draft.categories[ci].groups[gi];
-            const neu = inp.value.trim();
-            draft.categories[ci].groups[gi] = neu;
-            (draft.categories[ci].items || []).forEach((it) => { if (it.group === old) it.group = neu; });
-            drawCats();
-          };
-        });
-        box.querySelectorAll("[data-gdel]").forEach((btn) => {
-          btn.onclick = () => {
-            const card = btn.closest(".card");
-            const ci = card ? +card.dataset.ci : -1;
-            if (ci < 0 || !draft.categories[ci]) return;
-            const gi = +btn.dataset.gdel;
-            const old = (draft.categories[ci].groups || [])[gi];
-            draft.categories[ci].groups.splice(gi, 1);
-            (draft.categories[ci].items || []).forEach((it) => { if (it.group === old) it.group = ""; });
-            drawCats();
-          };
-        });
+        };
+        el.addEventListener("change", apply);
+        el.addEventListener("input", apply);
+      });
+      const delC = card.querySelector("[data-cdel]");
+      if (delC) {
+        delC.onclick = () => {
+          draft.categories.splice(ci, 1);
+          if (focusCat >= draft.categories.length) focusCat = Math.max(0, draft.categories.length - 1);
+          drawCats();
+        };
+      }
+      card.querySelectorAll("[data-idel]").forEach((btn) => {
+        btn.onclick = () => { draft.categories[ci].items.splice(+btn.dataset.idel, 1); drawCats(); };
+      });
+    });
+    box.querySelectorAll("input[data-gi]").forEach((inp) => {
+      const card = inp.closest(".card");
+      const ci = card ? +card.dataset.ci : -1;
+      inp.onchange = () => {
+        if (ci < 0 || !draft.categories[ci]) return;
+        if (!draft.categories[ci].groups) draft.categories[ci].groups = [];
+        const gi = +inp.dataset.gi;
+        const old = draft.categories[ci].groups[gi];
+        const neu = inp.value.trim();
+        draft.categories[ci].groups[gi] = neu;
+        (draft.categories[ci].items || []).forEach((it) => { if (it.group === old) it.group = neu; });
+        drawCats();
+      };
+    });
+    box.querySelectorAll("[data-gdel]").forEach((btn) => {
+      btn.onclick = () => {
+        const card = btn.closest(".card");
+        const ci = card ? +card.dataset.ci : -1;
+        if (ci < 0 || !draft.categories[ci]) return;
+        const gi = +btn.dataset.gdel;
+        const old = (draft.categories[ci].groups || [])[gi];
+        draft.categories[ci].groups.splice(gi, 1);
+        (draft.categories[ci].items || []).forEach((it) => { if (it.group === old) it.group = ""; });
+        drawCats();
+      };
+    });
         box.querySelectorAll("[data-gadd]").forEach((btn) => {
-          btn.onclick = () => {
-            const ci = +btn.dataset.gadd;
-            if (!draft.categories[ci]) return;
-            if (!draft.categories[ci].groups) draft.categories[ci].groups = [];
-            draft.categories[ci].groups.push("");
-            draft.categories[ci].folder = true;
-            focusCat = ci;
-            drawCats();
-          };
-        });
-        box.querySelectorAll("[data-iadd]").forEach((btn) => {
-          btn.onclick = () => {
-            const ci = +btn.dataset.iadd;
-            if (!draft.categories[ci].items) draft.categories[ci].items = [];
-            draft.categories[ci].items.push({ name: "", typeId: "", label: "", group: "" });
-            if (draft.categories[ci].items.length > 1 && draft.categories[ci].folder == null) draft.categories[ci].folder = true;
-            focusCat = ci;
-            drawCats();
-          };
-        });
-      }
-
-      studio.querySelector("#nyZoneAdd").onclick = () => {
-        const name = studio.querySelector("#nyZoneName").value.trim();
-        if (!name) return;
-        draft.zones.push({ id: "z" + Date.now(), name });
-        studio.querySelector("#nyZoneName").value = "";
-        drawStudio();
-      };
-
-      studio.querySelector("#nyCatAdd").onclick = () => {
-        const zone = (draft.zones[0] && draft.zones[0].id) || "";
-        draft.categories.push({
-          key: "", label: "Новая категория", zone, score: 0, folder: false, drop: false, groups: [],
-          items: [{ name: "", typeId: "", label: "", group: "" }]
-        });
-        focusCat = draft.categories.length - 1;
+      btn.onclick = () => {
+        const ci = +btn.dataset.gadd;
+        if (!draft.categories[ci]) return;
+        if (!draft.categories[ci].groups) draft.categories[ci].groups = [];
+        draft.categories[ci].groups.push("");
+        draft.categories[ci].folder = true;
+        focusCat = ci;
         drawCats();
       };
-
-      function refreshMouthChips() {
-        const box = document.querySelector("#nyMouth");
-        if (!box || !authorOk || studio.style.display === "none") return;
-        const items = getMouthItems();
-        if (!items.length) { box.innerHTML = '<span class="muted">пусто</span>'; return; }
-        box.innerHTML = items.map((it) => `
-          <span class="chip" data-tid="${escAttr(it.typeId || "")}" title="уникальный ${escAttr(it.id)}">
-            <img src="${thingImg(it.typeId || "0")}" alt="">
-            <b>${escAttr(it.typeId || "?")}</b>
-          </span>`).join("");
-        box.querySelectorAll(".chip").forEach((ch) => {
-          ch.onclick = () => {
-            if (!draft.categories[focusCat]) return;
-            const cat = draft.categories[focusCat];
-            if (!cat.items) cat.items = [];
-            const tid = ch.dataset.tid;
-            if (tid && cat.items.some((x) => String(x.typeId) === tid)) {
-              stMsg("этот type ID уже есть в категории");
-              return;
-            }
-            const lastFind = pendingFinds[pendingFinds.length - 1];
-            let guess = "";
-            const hist = document.querySelector("#ist");
-            if (hist) {
-              const ev = splitEvents(hist.textContent || "").reverse();
-              for (const line of ev) {
-                const m = line.match(FIND_RE);
-                if (m) { guess = String(m[1] || "").trim(); break; }
-              }
-            }
-            if (lastFind && lastFind.key) guess = lastFind.key;
-            cat.items.push({ name: guess, typeId: tid });
-            drawCats();
-            stMsg("добавлен type ID " + tid);
-          };
-        });
-      }
-
-      studio.querySelector("#nySave").onclick = () => {
-        const tribeInp = studio.querySelector("#nyTribe");
-        if (tribeInp) {
-          const v = tribeInp.value.trim();
-          if (v) draft.allowedTribe = v;
-        }
-        for (const c of draft.categories) {
-          if (!c.key) {
-            const n = (c.items || []).map((i) => i.name).find(Boolean);
-            c.key = n || c.label;
-          }
-          c.groups = (c.groups || []).map((g) => String(g || "").trim()).filter(Boolean);
-          c.items = (c.items || []).filter((i) => String(i.name || "").trim() || String(i.typeId || "").trim());
-        }
-        saveDraft();
-        applyDraftLive();
-        stMsg("применено в этой сессии");
+    });
+    box.querySelectorAll("[data-iadd]").forEach((btn) => {
+      btn.onclick = () => {
+        const ci = +btn.dataset.iadd;
+        if (!draft.categories[ci].items) draft.categories[ci].items = [];
+        draft.categories[ci].items.push({ name: "", typeId: "", label: "", group: "" });
+        if (draft.categories[ci].items.length > 1 && draft.categories[ci].folder == null) draft.categories[ci].folder = true;
+        focusCat = ci;
+        drawCats();
       };
+    });
+  }
 
-      studio.querySelector("#nyRevert").onclick = () => {
-        if (!confirm("Вернуть встроенную схему?")) return;
-        draft = { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES), allowedTribe: BUILTIN_TRIBE };
-        saveDraft();
-        applyDraftLive();
-        drawStudio();
-        stMsg("встроенная схема");
-      };
+  studio.querySelector("#nyZoneAdd").onclick = () => {
+    const name = studio.querySelector("#nyZoneName").value.trim();
+    if (!name) return;
+    draft.zones.push({ id: "z" + Date.now(), name });
+    studio.querySelector("#nyZoneName").value = "";
+    drawStudio();
+  };
 
-      async function urlToData(url) {
-        url = String(url || "").trim();
-        if (!url) return "";
-        if (/^data:/i.test(url)) return url;
-        try {
-          const res = await fetch(url, { mode: "cors", credentials: "omit", cache: "force-cache" });
-          if (!res.ok) return url;
-          const blob = await res.blob();
-          if (!blob || !blob.size) return url;
-          if (blob.size > 1.5 * 1024 * 1024) {
-            console.warn("[ny] большая картинка при экспорте:", url, (blob.size / 1024 / 1024).toFixed(2) + " МБ");
-          }
-          return await new Promise((resolve) => {
-            const fr = new FileReader();
-            fr.onload = () => resolve(String(fr.result || url));
-            fr.onerror = () => resolve(url);
-            fr.readAsDataURL(blob);
-          });
-        } catch (e) { return url; }
-      }
+  studio.querySelector("#nyCatAdd").onclick = () => {
+    const zone = (draft.zones[0] && draft.zones[0].id) || "";
+    draft.categories.push({
+      key: "", label: "Новая категория", zone, score: 0, folder: false, drop: false, groups: [],
+      items: [{ name: "", typeId: "", label: "", group: "" }]
+    });
+    focusCat = draft.categories.length - 1;
+    drawCats();
+  };
 
-      async function bakeExportCategories(cats) {
-        const out = clone(cats);
-        await Promise.all(out.map(async (c) => {
-          const src = catCustomImg(c);
-          if (src) { c.img = await urlToData(src); delete c.folderImg; }
-          if (Array.isArray(c.items)) {
-            await Promise.all(c.items.map(async (it) => {
-              if (it.img) it.img = await urlToData(it.img);
-            }));
-          }
-        }));
-        return out;
-      }
-
-      studio.querySelector("#nyExport").onclick = async () => {
-        stMsg("сохраняю картинки…");
-        let cats = draft.categories;
-        try { cats = await bakeExportCategories(draft.categories); }
-        catch (e) { cats = draft.categories; }
-        let tribeOut = BUILTIN_TRIBE;
-        try {
-          const raw = String(draft.allowedTribe || "").trim();
-          if (looksLocked(raw)) tribeOut = raw.toLowerCase();
-          else if (raw) tribeOut = await tribeToken(raw);
-          else if (looksLocked(BUILTIN_TRIBE)) tribeOut = String(BUILTIN_TRIBE).toLowerCase();
-        } catch (e) { tribeOut = BUILTIN_TRIBE; }
-        const text = [
-          "const BUILTIN_TRIBE = " + JSON.stringify(tribeOut) + ";",
-          "const BUILTIN_ZONES = " + JSON.stringify(draft.zones, null, 2) + ";",
-          "const BUILTIN_CATEGORIES = " + JSON.stringify(cats, null, 2) + ";"
-        ].join("\n\n");
-        const done = (msg) => { stMsg(msg); };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(() => done("скопировано, картинки внутри")).catch(() => fallback());
-        } else fallback();
-        function fallback() {
-          const ta = document.createElement("textarea");
-          ta.value = text;
-          document.body.appendChild(ta);
-          ta.select();
-          try { document.execCommand("copy"); done("скопировано, картинки внутри"); }
-          catch (e) { done("не удалось скопировать"); }
-          ta.remove();
-        }
-      };
-
-      studio.querySelector("#nyPw").onclick = async () => {
-        const a = prompt("Новый ключ");
-        if (!a) return;
-        const b = prompt("Ещё раз");
-        if (a !== b) { stMsg("не совпало"); return; }
-        try { localStorage.setItem(_PK, await digest(a + _S)); stMsg("ключ обновлён только в этом браузере"); }
-        catch (e) { stMsg("не удалось обновить ключ"); }
-      };
-
-      studio.querySelector("#nyPwReset").onclick = () => {
-        if (!confirm("Сбросить локальный ключ (вернуться ко встроенному)?")) return;
-        try { localStorage.removeItem(_PK); } catch (e) {}
-        stMsg("локальный ключ сброшен");
-      };
-
-      function escAttr(s) {
-        return String(s == null ? "" : s)
-          .replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      }
-
-      function onHistoryNode(hist) {
-        const text = hist.textContent || "";
-        const delta = newestExtra(state.lastHist, text);
-
-        if (delta.kind === "clear") {
-          pendingFinds.length = 0;
-          pendingPuts.length = 0;
-          state.lastHist = text;
-          saveState();
+  function refreshMouthChips() {
+    const box = document.querySelector("#nyMouth");
+    if (!box || !authorOk || studio.style.display === "none") return;
+    const items = getMouthItems();
+    if (!items.length) { box.innerHTML = '<span class="muted">пусто</span>'; return; }
+    box.innerHTML = items.map((it) => `
+      <span class="chip" data-tid="${escAttr(it.typeId || "")}" title="уникальный ${escAttr(it.id)}">
+        <img src="${thingImg(it.typeId || "0")}" alt="">
+        <b>${escAttr(it.typeId || "?")}</b>
+      </span>`).join("");
+    box.querySelectorAll(".chip").forEach((ch) => {
+      ch.onclick = () => {
+        if (!draft.categories[focusCat]) return;
+        const cat = draft.categories[focusCat];
+        if (!cat.items) cat.items = [];
+        const tid = ch.dataset.tid;
+        if (tid && cat.items.some((x) => String(x.typeId) === tid)) {
+          stMsg("этот type ID уже есть в категории");
           return;
         }
-
-        if (delta.kind === "fresh") {
-          if (!state.lastHist) {
-            consumeHistory(delta.extra, "replay");
-            adoptUnboundMouth(text);
-            pendingFinds.length = 0;
-            pendingNews.length = 0;
-          } else {
-            const unseen = extraEvents(state.lastHist, text);
-            if (unseen.length) consumeHistory(unseen.join(" "), "live");
+        const lastFind = pendingFinds[pendingFinds.length - 1];
+        let guess = "";
+        const hist = document.querySelector("#ist");
+        if (hist) {
+          const ev = splitEvents(hist.textContent || "").reverse();
+          for (const line of ev) {
+            const m = line.match(FIND_RE);
+            if (m) { guess = String(m[1] || "").trim(); break; }
           }
-        } else if (delta.kind === "append" && delta.extra.trim()) {
-          consumeHistory(delta.extra, "live");
         }
+        if (lastFind && lastFind.key) guess = lastFind.key;
+        cat.items.push({ name: guess, typeId: tid });
+        drawCats();
+        stMsg("добавлен type ID " + tid);
+      };
+    });
+  }
 
-        state.lastHist = text;
-        saveState();
-        paintHistory(hist);
-        updateTable();
+  studio.querySelector("#nySave").onclick = () => {
+    const tribeInp = studio.querySelector("#nyTribe");
+    if (tribeInp) {
+      const v = tribeInp.value.trim();
+      if (v) draft.allowedTribe = v;
+    }
+    for (const c of draft.categories) {
+      if (!c.key) {
+        const n = (c.items || []).map((i) => i.name).find(Boolean);
+        c.key = n || c.label;
       }
+      c.groups = (c.groups || []).map((g) => String(g || "").trim()).filter(Boolean);
+      c.items = (c.items || []).filter((i) => String(i.name || "").trim() || String(i.typeId || "").trim());
+    }
+    saveDraft();
+    applyDraftLive();
+    stMsg("применено в этой сессии");
+  };
 
-      function hookHistory(hist) {
-        let parseTimeout = null;
-        let lastSeen = "";
+  studio.querySelector("#nyRevert").onclick = () => {
+    if (!confirm("Вернуть встроенную схему?")) return;
+    draft = { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES), allowedTribe: BUILTIN_TRIBE };
+    saveDraft();
+    applyDraftLive();
+    drawStudio();
+    stMsg("встроенная схема");
+  };
 
-        const run = () => {
-          if (ignoreMutations) return;
-          const text = hist.textContent || "";
-          if (text === lastSeen) {
-            if (!hist.querySelector(".cw-ny-found") && text && !/История очищена/i.test(text)) paintHistory(hist);
-            return;
-          }
-          lastSeen = text;
-          onHistoryNode(hist);
-        };
-
-        run();
-        new MutationObserver(() => {
-          if (ignoreMutations) return;
-          clearTimeout(parseTimeout);
-          parseTimeout = setTimeout(run, 200);
-        }).observe(hist, { childList: true, subtree: true, characterData: true });
+  async function urlToData(url) {
+    url = String(url || "").trim();
+    if (!url) return "";
+    if (/^data:/i.test(url)) return url;
+    try {
+      const res = await fetch(url, { mode: "cors", credentials: "omit", cache: "force-cache" });
+      if (!res.ok) return url;
+      const blob = await res.blob();
+      if (!blob || !blob.size) return url;
+      if (blob.size > 1.5 * 1024 * 1024) {
+        console.warn("[ny] большая картинка при экспорте:", url, (blob.size / 1024 / 1024).toFixed(2) + " МБ");
       }
+      return await new Promise((resolve) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result || url));
+        fr.onerror = () => resolve(url);
+        fr.readAsDataURL(blob);
+      });
+    } catch (e) { return url; }
+  }
 
-      function hookMouth() {
-        const root = document.querySelector("#tr_mouth") || document.querySelector("#app") || document.body;
-        lastMouth = getMouthItems();
-        for (const item of lastMouth) {
-          const rec = state.items[item.id];
-          if (rec && rec.status === "delivered") unDeliver(item.id);
-        }
-        adoptUnboundMouth((document.querySelector("#ist") || {}).textContent || "");
-        updateTable();
-        new MutationObserver(() => syncMouth()).observe(root, { childList: true, subtree: true });
-        if (!document.documentElement.dataset.nySelHook) {
-          document.documentElement.dataset.nySelHook = "1";
-          document.addEventListener("click", (e) => {
-            const itemEl = e.target.closest && e.target.closest("#itemList .itemInMouth, .itemInMouth");
-            if (itemEl && itemEl.id) {
-              const img = itemEl.querySelector("img");
-              const src = (img && (img.getAttribute("src") || img.src)) || "";
-              const tm = src.match(/things\/(\d+)/);
-              noteSelected(itemEl.id, tm ? tm[1] : null);
-            }
-            const a = e.target.closest && e.target.closest("a");
-            if (a && /поверхностно|тщательно/i.test(a.textContent || "")) {
-              snapshotSelected();
-              if (lastSelected.id) {
-                pendingLooks.push({
-                  id: lastSelected.id, key: lastSelected.key, typeId: lastSelected.typeId,
-                  t: Date.now(), seenLook: false
-                });
-              }
-            }
-          }, true);
-        }
+  async function bakeExportCategories(cats) {
+    const out = clone(cats);
+    await Promise.all(out.map(async (c) => {
+      const src = catCustomImg(c);
+      if (src) { c.img = await urlToData(src); delete c.folderImg; }
+      if (Array.isArray(c.items)) {
+        await Promise.all(c.items.map(async (it) => {
+          if (it.img) it.img = await urlToData(it.img);
+        }));
       }
+    }));
+    return out;
+  }
 
-      function hookLocation() {
-        rememberLocation();
-        const el = document.querySelector("#location") || document.querySelector(".location") || document.querySelector("[class*='location']");
-        const root = el || document.querySelector("#app") || document.body;
-        new MutationObserver(() => rememberLocation()).observe(root, { childList: true, subtree: true, characterData: true });
+  studio.querySelector("#nyExport").onclick = async () => {
+    stMsg("сохраняю картинки…");
+    let cats = draft.categories;
+    try { cats = await bakeExportCategories(draft.categories); }
+    catch (e) { cats = draft.categories; }
+    let tribeOut = BUILTIN_TRIBE;
+    try {
+      const raw = String(draft.allowedTribe || "").trim();
+      if (looksLocked(raw)) tribeOut = raw.toLowerCase();
+      else if (raw) tribeOut = await tribeToken(raw);
+      else if (looksLocked(BUILTIN_TRIBE)) tribeOut = String(BUILTIN_TRIBE).toLowerCase();
+    } catch (e) { tribeOut = BUILTIN_TRIBE; }
+    const text = [
+      "const BUILTIN_TRIBE = " + JSON.stringify(tribeOut) + ";",
+      "const BUILTIN_ZONES = " + JSON.stringify(draft.zones, null, 2) + ";",
+      "const BUILTIN_CATEGORIES = " + JSON.stringify(cats, null, 2) + ";"
+    ].join("\n\n");
+    const done = (msg) => { stMsg(msg); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => done("скопировано, картинки внутри")).catch(() => fallback());
+    } else fallback();
+    function fallback() {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); done("скопировано, картинки внутри"); }
+      catch (e) { done("не удалось скопировать"); }
+      ta.remove();
+    }
+  };
+
+  studio.querySelector("#nyPw").onclick = async () => {
+    const a = prompt("Новый ключ");
+    if (!a) return;
+    const b = prompt("Ещё раз");
+    if (a !== b) { stMsg("не совпало"); return; }
+    try { localStorage.setItem(_PK, await digest(a + _S)); stMsg("ключ обновлён только в этом браузере"); }
+    catch (e) { stMsg("не удалось обновить ключ"); }
+  };
+
+  studio.querySelector("#nyPwReset").onclick = () => {
+    if (!confirm("Сбросить локальный ключ (вернуться ко встроенному)?")) return;
+    try { localStorage.removeItem(_PK); } catch (e) {}
+    stMsg("локальный ключ сброшен");
+  };
+
+  function escAttr(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function onHistoryNode(hist) {
+    const text = hist.textContent || "";
+    const delta = newestExtra(state.lastHist, text);
+
+    if (delta.kind === "clear") {
+      pendingFinds.length = 0;
+      pendingPuts.length = 0;
+      state.lastHist = text;
+      saveState();
+      return;
+    }
+
+    if (delta.kind === "fresh") {
+      if (!state.lastHist) {
+        consumeHistory(delta.extra, "replay");
+        adoptUnboundMouth(text);
+        pendingFinds.length = 0;
+        pendingNews.length = 0;
+      } else {
+        const unseen = extraEvents(state.lastHist, text);
+        if (unseen.length) consumeHistory(unseen.join(" "), "live");
       }
+    } else if (delta.kind === "append" && delta.extra.trim()) {
+      consumeHistory(delta.extra, "live");
+    }
 
-      function startGameHooks() {
-        if (bootStarted) return;
-        bootStarted = true;
-        const boot = setInterval(() => {
-          const hist = document.querySelector("#ist");
-          if (!hist) return;
-          clearInterval(boot);
-          hookHistory(hist);
-          hookMouth();
-          hookLocation();
-          updateTable();
-        }, 500);
+    state.lastHist = text;
+    saveState();
+    paintHistory(hist);
+    updateTable();
+  }
+
+  function hookHistory(hist) {
+    let parseTimeout = null;
+    let lastSeen = "";
+
+    const run = () => {
+      if (ignoreMutations) return;
+      const text = hist.textContent || "";
+      if (text === lastSeen) {
+        if (!hist.querySelector(".cw-ny-found") && text && !/История очищена/i.test(text)) paintHistory(hist);
+        return;
       }
+      lastSeen = text;
+      onHistoryNode(hist);
+    };
 
-      function mojibake(s) {
-        try { return unescape(encodeURIComponent(s)); }
-        catch (e) { return "Ð½Ñ‹Â·Ð»Ð¾Ð³"; }
-      }
+    run();
+    new MutationObserver(() => {
+      if (ignoreMutations) return;
+      clearTimeout(parseTimeout);
+      parseTimeout = setTimeout(run, 200);
+    }).observe(hist, { childList: true, subtree: true, characterData: true });
+  }
 
-      function restoreRealPanel() {
-        const title = panel.querySelector("#nyTitle");
-        if (title) title.textContent = "Ныныны · лог нырков";
-        const box = panel.querySelector("#panelContent");
-        if (!box) return;
-        if (!box.querySelector("#resourceTable")) {
-          box.innerHTML = `
-            <div id="nyTableWrap"><table id="resourceTable"></table></div>
-            <div id="nyResize" title="Потяните, чтобы изменить высоту"></div>
-            <div id="idLog"></div>
-            <div class="hint">
-              Наведите (или тапните) на подсвеченное действие в истории — появится уникальный ID.
-              Сдача только в нужной локации у уже подписанного ID.
-              Подняли обратно — снова не сдан. Камень сдаётся, если просто положили.
-              Очистка истории счётчик не сбрасывает.
-            </div>`;
-          applyTableHeight(loadTableHeight());
-        }
-        renderResourceRows();
-      }
-
-      function showBrokenShell() {
-        scriptAlive = false;
-        if (panel && !document.body.contains(panel)) mount(panel);
-        panel.style.display = "";
-        const title = panel.querySelector("#nyTitle");
-        if (title) title.textContent = mojibake("Ныныны") + " Â· " + mojibake("лог");
-        const box = panel.querySelector("#panelContent");
-        if (box) {
-          box.innerHTML = `
-            <table>
-              <tr><th>${mojibake("Ресурс")}</th><th>??</th><th>Â�</th></tr>
-              <tr><td>Ð¼Ð¾Ñ…�</td><td>?</td><td>NaN</td></tr>
-              <tr><td>Ð²ÐµÑ‚ÐºÂ�</td><td>□</td><td>—</td></tr>
-              <tr><td>Â«Â» Ã Ã</td><td>undefined</td><td>0</td></tr>
-            </table>
-            <div class="hint">${mojibake("ошибка кодировки")} / cp1251</div>`;
-        }
-        if (gate) { gate.style.display = "none"; gate.hidden = true; }
-        if (studio) { studio.style.display = "none"; studio.hidden = true; }
-        placePanelOnScreen();
-      }
-
-      function reviveScript() {
-        scriptAlive = true;
-        if (panel && !document.body.contains(panel)) mount(panel);
-        panel.style.display = "";
-        restoreRealPanel();
-        placePanelOnScreen();
-        startGameHooks();
-      }
-
-      function killScript() { showBrokenShell(); }
-
-      async function enforceTribe() {
-        if (authorOk) { reviveScript(); return; }
-        const need = String(allowedTribe || BUILTIN_TRIBE || "").trim();
-        if (!need || !looksLocked(need)) { killScript(); return; }
-        const found = await readPlayerTribe();
-        if (await tribesMatch(found, need)) { reviveScript(); return; }
-        killScript();
-      }
-
+  function hookMouth() {
+    const root = document.querySelector("#tr_mouth") || document.querySelector("#app") || document.body;
+    lastMouth = getMouthItems();
+    for (const item of lastMouth) {
+      const rec = state.items[item.id];
+      if (rec && rec.status === "delivered") unDeliver(item.id);
+    }
+    adoptUnboundMouth((document.querySelector("#ist") || {}).textContent || "");
+    updateTable();
+    new MutationObserver(() => syncMouth()).observe(root, { childList: true, subtree: true });
+    if (!document.documentElement.dataset.nySelHook) {
+      document.documentElement.dataset.nySelHook = "1";
       document.addEventListener("click", (e) => {
-        if (e.shiftKey && e.altKey && e.ctrlKey) { e.preventDefault(); e.stopPropagation(); openGate(); }
+        const itemEl = e.target.closest && e.target.closest("#itemList .itemInMouth, .itemInMouth");
+        if (itemEl && itemEl.id) {
+          const img = itemEl.querySelector("img");
+          const src = (img && (img.getAttribute("src") || img.src)) || "";
+          const tm = src.match(/things\/(\d+)/);
+          noteSelected(itemEl.id, tm ? tm[1] : null);
+        }
+        const a = e.target.closest && e.target.closest("a");
+        if (a && /поверхностно|тщательно/i.test(a.textContent || "")) {
+          snapshotSelected();
+          if (lastSelected.id) {
+            pendingLooks.push({
+              id: lastSelected.id, key: lastSelected.key, typeId: lastSelected.typeId,
+              t: Date.now(), seenLook: false
+            });
+          }
+        }
       }, true);
+    }
+  }
 
-      enforceTribe();
-    })();
+  function hookLocation() {
+    rememberLocation();
+    const el = document.querySelector("#location") || document.querySelector(".location") || document.querySelector("[class*='location']");
+    const root = el || document.querySelector("#app") || document.body;
+    new MutationObserver(() => rememberLocation()).observe(root, { childList: true, subtree: true, characterData: true });
+  }
+
+  function startGameHooks() {
+    if (bootStarted) return;
+    bootStarted = true;
+    const boot = setInterval(() => {
+      const hist = document.querySelector("#ist");
+      if (!hist) return;
+      clearInterval(boot);
+      hookHistory(hist);
+      hookMouth();
+      hookLocation();
+      updateTable();
+    }, 500);
+  }
+
+  function mojibake(s) {
+    try { return unescape(encodeURIComponent(s)); }
+    catch (e) { return "Ð½Ñ‹Â·Ð»Ð¾Ð³"; }
+  }
+
+  function restoreRealPanel() {
+    const title = panel.querySelector("#nyTitle");
+    if (title) title.textContent = "Ныныны · лог нырков";
+    const box = panel.querySelector("#panelContent");
+    if (!box) return;
+    if (!box.querySelector("#resourceTable")) {
+      box.innerHTML = `
+        <div id="nyTableWrap"><table id="resourceTable"></table></div>
+        <div id="nyResize" title="Потяните, чтобы изменить высоту"></div>
+        <div id="idLog"></div>
+        <div class="hint">
+          Наведите (или тапните) на подсвеченное действие в истории — появится уникальный ID.
+          Сдача только в нужной локации у уже подписанного ID.
+          Подняли обратно — снова не сдан. Камень сдаётся, если просто положили.
+          Очистка истории счётчик не сбрасывает.
+        </div>`;
+      applyTableHeight(loadTableHeight());
+    }
+    renderResourceRows();
+  }
+
+  function showBrokenShell() {
+    scriptAlive = false;
+    if (panel && !document.body.contains(panel)) mount(panel);
+    panel.style.display = "";
+    const title = panel.querySelector("#nyTitle");
+    if (title) title.textContent = mojibake("Ныныны") + " Â· " + mojibake("лог");
+    const box = panel.querySelector("#panelContent");
+    if (box) {
+      box.innerHTML = `
+        <table>
+          <tr><th>${mojibake("Ресурс")}</th><th>??</th><th>Â�</th></tr>
+          <tr><td>Ð¼Ð¾Ñ…�</td><td>?</td><td>NaN</td></tr>
+          <tr><td>Ð²ÐµÑ‚ÐºÂ�</td><td>□</td><td>—</td></tr>
+          <tr><td>Â«Â» Ã Ã</td><td>undefined</td><td>0</td></tr>
+        </table>
+        <div class="hint">${mojibake("ошибка кодировки")} / cp1251</div>`;
+    }
+    if (gate) { gate.style.display = "none"; gate.hidden = true; }
+    if (studio) { studio.style.display = "none"; studio.hidden = true; }
+    placePanelOnScreen();
+  }
+
+  function reviveScript() {
+    scriptAlive = true;
+    if (panel && !document.body.contains(panel)) mount(panel);
+    panel.style.display = "";
+    restoreRealPanel();
+    placePanelOnScreen();
+    startGameHooks();
+  }
+
+  function killScript() { showBrokenShell(); }
+
+  async function enforceTribe() {
+    if (authorOk) { reviveScript(); return; }
+    const need = String(allowedTribe || BUILTIN_TRIBE || "").trim();
+    if (!need || !looksLocked(need)) { killScript(); return; }
+    const found = await readPlayerTribe();
+    if (await tribesMatch(found, need)) { reviveScript(); return; }
+    killScript();
+  }
+
+  document.addEventListener("click", (e) => {
+    if (e.shiftKey && e.altKey && e.ctrlKey) { e.preventDefault(); e.stopPropagation(); openGate(); }
+  }, true);
+
+  enforceTribe();
+})();
