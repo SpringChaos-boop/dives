@@ -8,6 +8,7 @@
 // @match        https://catwar.net/cw3
 // @match        https://catwar.su/cw3/
 // @match        https://catwar.su/cw3
+// @icon         https://tinyurl.com/3uepc5pm
 // @updateURL    https://github.com/SpringChaos-boop/dives/raw/refs/heads/main/ouch.user.js
 // @downloadURL  https://github.com/SpringChaos-boop/dives/raw/refs/heads/main/ouch.user.js
 // @run-at       document-idle
