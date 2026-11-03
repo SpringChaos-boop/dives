@@ -898,15 +898,25 @@
     lastMouth = now;
   }
 
-  function takeRemoved(key) {
+    function takeRemoved(key) {
     expireQueues();
     for (let i = lastRemoved.length - 1; i >= 0; i--) {
       const it = lastRemoved[i];
       const k = it.key || (it.typeId && typeToKey[it.typeId]);
-      if (k === key && state.items[it.id] && state.items[it.id].key === key) {
-        lastRemoved.splice(i, 1); it.key = key; return it;
+      if (k === key) {
+        lastRemoved.splice(i, 1); 
+        it.key = key; 
+        if (state.items[it.id] && state.items[it.id].key === key) {
+          return it;
+        } else {
+          return { foreign: true }; 
+        }
       }
     }
+    
+    const res = resources.find(r => r.key === key);
+    if (res && res.drop) return null; 
+
     const mouthIds = new Set(getMouthItems().map((x) => x.id));
     for (let i = state.order.length - 1; i >= 0; i--) {
       const id = state.order[i];
@@ -968,18 +978,32 @@
     }
   }
 
-  function handlePutResource(key, zone, lineHasStone) {
+    function handlePutResource(key, zone, lineHasStone) {
     const removed = takeRemoved(key);
+    if (removed && removed.foreign) return; 
     if (removed) { putKnownItem(removed.id, key, zone, lineHasStone); return; }
     pendingPuts.push({ key, zone, lineHasStone, t: Date.now() });
   }
 
-  function flushPendingPuts() {
+    function flushPendingPuts() {
     expireQueues();
     for (let i = 0; i < pendingPuts.length; ) {
       const p = pendingPuts[i];
       const removed = takeRemoved(p.key);
-      if (!removed) { i++; continue; }
+      
+      if (removed && removed.foreign) {
+        pendingPuts.splice(i, 1); 
+        continue;
+      }
+
+      if (!removed) {
+        if (Date.now() - p.t > 5000) {
+          pendingPuts.splice(i, 1);
+        } else {
+          i++;
+        }
+        continue; 
+      }
       pendingPuts.splice(i, 1);
       if (state.items[removed.id]) putKnownItem(removed.id, p.key, p.zone, p.lineHasStone);
     }
