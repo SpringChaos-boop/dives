@@ -708,13 +708,25 @@
     return lastSelected.id ? lastSelected : null;
   }
 
-  function handleLookLine(name) {
+    function handleLookLine(name) {
     const hit = matchResourceHit(name);
     snapshotSelected();
     if (!lastSelected.id) return;
     const key = (hit && hit.res && hit.res.key) || lastSelected.key;
     if (!key) return;
     const sub = (hit && hit.name) || "";
+
+    // --- НОВЫЙ ФИКС: Регистрация при осмотре, если предмет еще не зачтен ---
+    if (!state.items[lastSelected.id]) {
+      if (registerFound(lastSelected.id, key, lastSelected.typeId, sub)) {
+        const ni = pendingNews.findIndex(x => x.id === lastSelected.id);
+        if (ni >= 0) pendingNews.splice(ni, 1);
+        updateTable();
+        const hist = document.querySelector("#ist");
+        if (hist) paintHistory(hist);
+      }
+    }
+
     const existing = pendingLooks.find((x) => x.id === lastSelected.id && !x.seenLook);
     if (existing) {
       existing.seenLook = true;
