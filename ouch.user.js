@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Нырки КП
+// @name         Нырки
 // @namespace    http://tampermonkey.net/
-// @version      3.7.7
-// @description  Исключительно для Крылатого племени. Скрипт реализует лог добычи ресурсов для роли «нырок». Оптимизирован под мобильные устройства и устойчив к изменениям верстки.
+// @version      3.9.0
+// @description  Лог добычи ресурсов для роли «нырок». Работает на всех фракциях. Адаптивный дизайн, светлая/тёмная тема.
 // @author       Первая версия и идея принадлежат OGRTSV; исправления, доработка, улучшения и текущая поддержка осуществляются игроком Горицвет [1705753]
 // @match        https://catwar.net/cw3/
 // @match        https://catwar.net/cw3
@@ -34,17 +34,13 @@
   const HEIGHT_KEY = "cw_shaman_table_h_v7";
   const UI_KEY = "cw_ny_ui_v35";
   const FARM_KEY = "cw_ny_catch_db_v1";
-  const TRIBE_CACHE_KEY = "cw_ny_tribe_cache_v1";
-  const TRIBE_CACHE_MS = 5 * 60 * 1000;
+  const THEME_KEY = "cw_ny_theme_v1";
   const LOG_MAX = 500;
   const ID_LOG_MAX = 200;
   const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-  const BUILTIN_TRIBE = "30a0dd4e62f0fe4edc275fce73be51e50d2667f9a0ed8fec9882da04b4099c03";
-  let allowedTribe = BUILTIN_TRIBE;
   let scriptAlive = false;
   let bootStarted = false;
-  let lastReadTribe = "";
 
   const BUILTIN_ZONES = [
     { "id": "healer", "name": "Пещера знахаря" },
@@ -423,7 +419,7 @@
     for (const z of zones) if (z.test.test(name)) return z.id;
     return null;
   }
-  
+
   function locationName() {
     const el = document.querySelector("#location") || document.querySelector(".location") || document.querySelector("[class*='location']");
     if (el) return String(el.textContent || "").trim();
@@ -476,100 +472,9 @@
 
   function hasStone(text) { return STONE_RE.test(text || ""); }
 
-  function normTribe(s) {
-    return String(s || "").toLowerCase().replace(/[«»„""'']/g, "").replace(/\s+/g, " ").trim();
-  }
-  function looksLocked(s) { return /^[a-f0-9]{64}$/i.test(String(s || "").trim()); }
-
   async function digest(s) {
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
     return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-  async function tribeToken(name) { return digest(normTribe(name) + "\u0001" + _S); }
-  async function tribesMatch(found, allowed) {
-    const need = String(allowed || "").trim();
-    if (!need || !looksLocked(need)) return false;
-    if (!String(found || "").trim()) return false;
-    const got = await tribeToken(found);
-    return got === need.toLowerCase();
-  }
-
-  function parseTribeFromHtml(html) {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    const pick = (s) => String(s || "").replace(/\s+/g, " ").trim();
-
-    const icon = doc.querySelector("#clan_icon, img[title='Племя']");
-    if (icon) {
-      const row = icon.closest("tr");
-      const bold = row && row.querySelector("td b, b");
-      const fromIcon = pick(bold && bold.textContent);
-      if (fromIcon) return fromIcon;
-    }
-    const rawIcon = String(html).match(/id=["']clan_icon["'][\s\S]{0,600}?<b>([^<]{2,80})<\/b>/i);
-    if (rawIcon && rawIcon[1]) return pick(rawIcon[1]);
-
-    for (const tr of doc.querySelectorAll("tr")) {
-      const cells = [...tr.querySelectorAll("td, th")];
-      if (cells.length < 2) continue;
-      const label = pick(cells[0].textContent);
-      const titled = cells[0].querySelector("[title]");
-      const title = titled && titled.getAttribute("title");
-      if (/^племя$/i.test(String(title || ""))) {
-        const v = pick(cells[cells.length - 1].textContent);
-        if (v) return v;
-      }
-      if (/^(племя|фракция|клан|принадлежность)\s*:?$/i.test(label)) {
-        const v = pick(cells[cells.length - 1].textContent);
-        if (v) return v;
-      }
-    }
-
-    const text = pick((doc.body && doc.body.textContent) || "");
-    const labeled = [
-      /Племя\s*[:\-–]\s*([^\n]+)/i,
-      /Фракция\s*[:\-–]\s*([^\n]+)/i,
-      /Клан\s*[:\-–]\s*([^\n]+)/i,
-      /Принадлежность\s*[:\-–]\s*([^\n]+)/i,
-      /состоит в племени\s+([^\n.]+)/i,
-      /член(?:ом)? (?:племени|фракции|клана)\s+([^\n.]+)/i,
-      /жив[её]т в\s+([^\n.]*племен[ияюе][^\n.]*)/i
-    ];
-    for (const re of labeled) {
-      const m = text.match(re);
-      if (m && m[1]) return pick(m[1]);
-    }
-
-    for (const a of doc.querySelectorAll("a")) {
-      const parentTxt = pick((a.parentElement && a.parentElement.textContent) || "");
-      const name = pick(a.textContent);
-      if (name && /плем/i.test(name) && /плем|фракц|клан|принадлеж/i.test(parentTxt)) return name;
-    }
-    return "";
-  }
-
-  async function readPlayerTribe() {
-    try {
-      const cached = JSON.parse(sessionStorage.getItem(TRIBE_CACHE_KEY) || "null");
-      if (cached && cached.name && Date.now() - cached.t < TRIBE_CACHE_MS) {
-        lastReadTribe = cached.name;
-        return cached.name;
-      }
-    } catch (e) {}
-
-    const urls = ["/", location.origin + "/"];
-    for (const url of urls) {
-      try {
-        const res = await fetch(url, { credentials: "include", cache: "no-store" });
-        if (!res.ok) continue;
-        const name = parseTribeFromHtml(await res.text());
-        if (name) {
-          lastReadTribe = name;
-          try { sessionStorage.setItem(TRIBE_CACHE_KEY, JSON.stringify({ name, t: Date.now() })); } catch (e) {}
-          return name;
-        }
-      } catch (e) {}
-    }
-    return "";
   }
 
   function typeIdFromBlob(s) {
@@ -577,7 +482,7 @@
     const m = String(s).match(/(?:\/|_)([0-9]+)(?:\.png|\.jpg|\?|$)/i) || String(s).match(/([0-9]+)\.png/i);
     return m ? m[1] : "";
   }
-  
+
   function typeIdFromEl(el) {
     if (!el) return "";
     const bits = [];
@@ -708,7 +613,7 @@
     return lastSelected.id ? lastSelected : null;
   }
 
-    function handleLookLine(name) {
+  function handleLookLine(name) {
     const hit = matchResourceHit(name);
     snapshotSelected();
     if (!lastSelected.id) return;
@@ -716,7 +621,7 @@
     if (!key) return;
     const sub = (hit && hit.name) || "";
 
-    // --- НОВЫЙ ФИКС: Регистрация при осмотре, если предмет еще не зачтен ---
+    // --- Регистрация при осмотре, если предмет еще не зачтен ---
     if (!state.items[lastSelected.id]) {
       if (registerFound(lastSelected.id, key, lastSelected.typeId, sub)) {
         const ni = pendingNews.findIndex(x => x.id === lastSelected.id);
@@ -898,24 +803,24 @@
     lastMouth = now;
   }
 
-    function takeRemoved(key) {
+  function takeRemoved(key) {
     expireQueues();
     for (let i = lastRemoved.length - 1; i >= 0; i--) {
       const it = lastRemoved[i];
       const k = it.key || (it.typeId && typeToKey[it.typeId]);
       if (k === key) {
-        lastRemoved.splice(i, 1); 
-        it.key = key; 
+        lastRemoved.splice(i, 1);
+        it.key = key;
         if (state.items[it.id] && state.items[it.id].key === key) {
           return it;
         } else {
-          return { foreign: true }; 
+          return { foreign: true };
         }
       }
     }
-    
+
     const res = resources.find(r => r.key === key);
-    if (res && res.drop) return null; 
+    if (res && res.drop) return null;
 
     const mouthIds = new Set(getMouthItems().map((x) => x.id));
     for (let i = state.order.length - 1; i >= 0; i--) {
@@ -957,7 +862,7 @@
     if (!state.putLog) state.putLog = [];
     state.putLog.push({ id: String(id), key: rec.key, t: Date.now() });
     saveState();
-    
+
     if (zone && zone === res.zone) {
       if (res.drop) {
         let changed = false;
@@ -970,7 +875,7 @@
         }
         return;
       }
-      
+
       if (!groundPending.some((g) => g.id === String(id))) {
         groundPending.push({ id: String(id), key: rec.key, t: Date.now() });
       }
@@ -978,21 +883,21 @@
     }
   }
 
-    function handlePutResource(key, zone, lineHasStone) {
+  function handlePutResource(key, zone, lineHasStone) {
     const removed = takeRemoved(key);
-    if (removed && removed.foreign) return; 
+    if (removed && removed.foreign) return;
     if (removed) { putKnownItem(removed.id, key, zone, lineHasStone); return; }
     pendingPuts.push({ key, zone, lineHasStone, t: Date.now() });
   }
 
-    function flushPendingPuts() {
+  function flushPendingPuts() {
     expireQueues();
     for (let i = 0; i < pendingPuts.length; ) {
       const p = pendingPuts[i];
       const removed = takeRemoved(p.key);
-      
+
       if (removed && removed.foreign) {
-        pendingPuts.splice(i, 1); 
+        pendingPuts.splice(i, 1);
         continue;
       }
 
@@ -1002,7 +907,7 @@
         } else {
           i++;
         }
-        continue; 
+        continue;
       }
       pendingPuts.splice(i, 1);
       if (state.items[removed.id]) putKnownItem(removed.id, p.key, p.zone, p.lineHasStone);
@@ -1275,24 +1180,68 @@
   panel.id = "resourcePanel";
   panel.innerHTML = `
   <style>
+    :root {
+      --bg-main: #f4f9ff;
+      --panel-bg: rgba(255, 255, 255, 0.95);
+      --text-main: #1a3b5c;
+      --text-muted: #5a7c99;
+      --accent: #007bff;
+      --accent-hover: #0056b3;
+      --border-color: #cce4ff;
+      --table-head-bg: #e6f2ff;
+      --row-hover: #f0f7ff;
+      --row-folder: #e1f0ff;
+      --shadow: 0 8px 24px rgba(0, 50, 100, 0.1);
+      --btn-bg: #e6f2ff;
+      --btn-hover: #cce4ff;
+      --btn-text: #0056b3;
+      --green-bg: #e8f5e9;
+      --green-text: #2e7d32;
+      --tooltip-bg: #ffffff;
+      --tooltip-text: #0056b3;
+      --tooltip-border: #cce4ff;
+    }
+
+    [data-theme="dark"] {
+      --bg-main: #0a1120;
+      --panel-bg: rgba(13, 25, 45, 0.95);
+      --text-main: #d9f4ff;
+      --text-muted: #84a9c7;
+      --accent: #4fc3f7;
+      --accent-hover: #29b6f6;
+      --border-color: #1e3a5f;
+      --table-head-bg: #12233b;
+      --row-hover: #172b47;
+      --row-folder: #102036;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      --btn-bg: #1e3a5f;
+      --btn-hover: #2a4a73;
+      --btn-text: #b0e0ff;
+      --green-bg: rgba(46, 125, 50, 0.2);
+      --green-text: #81c784;
+      --tooltip-bg: #132238;
+      --tooltip-text: #4fc3f7;
+      --tooltip-border: #1e3a5f;
+    }
+
     #nyTrigger {
-      position: fixed; 
-      bottom: max(20px, env(safe-area-inset-bottom)); 
-      left: max(20px, env(safe-area-inset-left)); 
+      position: fixed;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      left: max(20px, env(safe-area-inset-left));
       z-index: 999999;
       width: 50px; height: 50px; border-radius: 50%;
       background: linear-gradient(135deg, #1e5799 0%,#2989d8 50%,#207cca 51%,#7db9e8 100%);
       color: white; font-size: 24px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; user-select: none;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.3);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
       transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s;
       border: 1px solid rgba(255, 255, 255, 0.2);
       touch-action: manipulation;
     }
     #nyTrigger:hover {
       transform: scale(1.1) rotate(-5deg);
-      box-shadow: 0 6px 20px rgba(40, 160, 255, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.4);
+      box-shadow: 0 6px 20px rgba(40, 160, 255, 0.4);
     }
     #nyTrigger:active {
       transform: scale(0.95);
@@ -1301,107 +1250,109 @@
     #resourcePanel {
       position: fixed; top: 10px; left: 10px;
       width: 462px; max-width: calc(100vw - 20px);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       font-size: 14.5px; user-select: none;
-      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-      color: #d9f4ff;
+      color: var(--text-main);
       z-index: 999998;
-      padding: 8px 8px 4px;
-      border-radius: 14px;
-      border: 1px solid rgba(90, 200, 230, .38);
-      background:
-        radial-gradient(120px 70px at 12% 0%, rgba(255, 130, 110, .16), transparent 70%),
-        radial-gradient(140px 80px at 92% 100%, rgba(40, 180, 150, .14), transparent 70%),
-        linear-gradient(180deg, rgba(10, 48, 78, .78) 0%, rgba(5, 24, 48, .84) 48%, rgba(2, 12, 30, .90) 100%);
-      box-shadow:
-        0 10px 32px rgba(0, 16, 36, .55),
-        inset 0 1px 0 rgba(180, 240, 255, .18),
-        inset 0 -18px 28px rgba(0, 30, 60, .25);
-      backdrop-filter: blur(7px);
-      transition: opacity 0.25s ease, transform 0.25s ease;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      background: var(--panel-bg);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      transition: opacity 0.25s ease, transform 0.25s ease, background 0.3s, border-color 0.3s;
       transform-origin: bottom left;
     }
     #resourcePanel.ny-hidden {
       opacity: 0; pointer-events: none; transform: scale(0.95) translateY(10px);
     }
-    #resourcePanel::before {
-      content: ""; pointer-events: none; position: absolute; inset: 0; border-radius: 14px;
-      background: repeating-linear-gradient(180deg, transparent 0 18px, rgba(80, 180, 220, .035) 18px 19px);
-      opacity: .7;
-    }
-    #resourcePanel > * { position: relative; }
+
     #resourcePanel table { width: 100%; border-collapse: separate; border-spacing: 0; text-align: center; }
     #resourcePanel td, #resourcePanel th {
-      padding: 5px 4px; vertical-align: middle; text-align: center;
-      border-bottom: 1px solid rgba(80, 160, 200, .16);
+      padding: 6px 4px; vertical-align: middle; text-align: center;
+      border-bottom: 1px solid var(--border-color);
     }
+
     #nyTableWrap {
       height: 352px; overflow: auto; border-radius: 8px;
-      border: 1px solid rgba(70, 170, 210, .28);
-      background: rgba(2, 16, 36, .28);
+      border: 1px solid var(--border-color);
+      background: var(--bg-main);
       -webkit-overflow-scrolling: touch;
+      transition: background 0.3s, border-color 0.3s;
     }
     #resourcePanel thead th {
       position: sticky; top: 0; z-index: 3;
-      background: linear-gradient(180deg, rgba(12, 56, 88, .96), rgba(8, 36, 64, .96));
-      color: #b9e8ff;
-      font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
-      border-bottom: 1px solid rgba(120, 210, 240, .35);
-      box-shadow: 0 2px 8px rgba(0, 10, 24, .35);
+      background: var(--table-head-bg);
+      color: var(--accent);
+      font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+      border-bottom: 1px solid var(--border-color);
+      transition: background 0.3s, color 0.3s;
     }
     #resourcePanel .ny-pic img {
       width: 58px; height: 58px; object-fit: contain;
-      background: rgba(0, 12, 28, .45);
+      background: var(--btn-bg);
       border-radius: 8px;
-      border: 1px solid rgba(90, 190, 220, .28);
+      border: 1px solid var(--border-color);
+      transition: background 0.3s, border-color 0.3s;
     }
-    #resourcePanel tr.ny-solo td:first-child { background: linear-gradient(90deg, rgba(20, 70, 110, .22), transparent); }
-    #resourcePanel tr.ny-folder td { background: linear-gradient(90deg, rgba(18, 80, 120, .38), rgba(8, 30, 56, .2)); }
+    #resourcePanel tr.ny-solo td:first-child { background: var(--row-hover); }
+    #resourcePanel tr.ny-folder td { background: var(--row-folder); }
     #resourcePanel tr.ny-folder td:first-child { font-weight: 700; }
+
     #resourcePanel .ny-fold-pic { position: relative; display: inline-block; cursor: pointer; }
     #resourcePanel .ny-fold-pic img {
       width: 58px; height: 58px; object-fit: contain;
-      background: rgba(0, 12, 28, .45); border-radius: 8px;
-      box-shadow: 0 0 0 1px rgba(255, 150, 120, .25), 0 0 12px rgba(40, 160, 200, .2);
+      background: var(--btn-bg); border-radius: 8px;
+      border: 1px solid var(--border-color);
+      transition: all 0.2s;
     }
-    #resourcePanel .ny-fold-pic:hover img { box-shadow: 0 0 0 2px #7ad7ff; }
+    #resourcePanel .ny-fold-pic:hover img { border-color: var(--accent); }
     #resourcePanel .ny-chev {
       position: absolute; right: 1px; bottom: 1px;
-      background: rgba(0, 20, 40, .75); color: #c8f0ff;
+      background: var(--accent); color: #fff;
       border-radius: 3px; font-style: normal; font-size: 11px;
       line-height: 1; padding: 2px 3px; pointer-events: none;
     }
-    #resourcePanel tr.ny-child td { background: rgba(4, 18, 36, .35); color: #c5e6f5; }
+
+    #resourcePanel tr.ny-child td { background: var(--bg-main); color: var(--text-main); }
     #resourcePanel tr.ny-child td:first-child {
-      padding-left: 28px; border-left: 3px solid rgba(255, 140, 120, .55); text-align: left;
+      padding-left: 28px; border-left: 3px solid var(--accent); text-align: left;
     }
     #resourcePanel tr.ny-child img {
       width: 38px; height: 38px; object-fit: contain;
-      background: rgba(0, 12, 28, .4); border-radius: 6px; vertical-align: middle;
+      background: var(--btn-bg); border-radius: 6px; vertical-align: middle;
+      border: 1px solid var(--border-color);
     }
     #resourcePanel tr.ny-child .ny-child-name { display: inline-block; margin-left: 6px; }
+
     #resourcePanel tr.ny-zone td {
-      padding: 4px 8px;
-      background: linear-gradient(90deg, rgba(30, 110, 160, .45), rgba(12, 50, 86, .28));
-      color: #e8fbff; font-size: 13px; font-weight: 700;
-      letter-spacing: .03em; cursor: pointer; text-align: left;
-      border-bottom: 1px solid rgba(140, 220, 255, .25);
+      padding: 6px 10px;
+      background: var(--table-head-bg);
+      color: var(--text-main); font-size: 13px; font-weight: 700;
+      cursor: pointer; text-align: left;
+      border-bottom: 2px solid var(--border-color);
     }
     #resourcePanel tr.ny-zone td:first-child { padding-left: 8px; }
-    #resourcePanel tr.ny-zone .ny-zone-mark { display: inline-block; width: 14px; color: #9be7ff; margin-right: 6px; }
+    #resourcePanel tr.ny-zone .ny-zone-mark { display: inline-block; width: 14px; color: var(--accent); margin-right: 6px; }
     #resourcePanel tr.ny-zone .ny-zone-ico { margin-right: 4px; opacity: .9; }
+
     #resourcePanel tr.ny-group td {
-      padding: 3px 8px 3px 34px; background: rgba(16, 64, 96, .35);
-      color: #cfefff; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
-      border-bottom: 1px dashed rgba(90, 180, 210, .25);
+      padding: 4px 8px 4px 34px; background: var(--row-hover);
+      color: var(--text-muted); font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
+      border-bottom: 1px dashed var(--border-color);
     }
-    #resourcePanel tr.ny-group .ny-zone-mark { color: #9be7ff; margin-right: 6px; }
-    #resourcePanel tr.ny-got td.delivered, #resourcePanel tr.ny-got td.score { color: #8ef0c0; font-weight: 700; }
-    #resourcePanel tr.ny-got td:first-child { box-shadow: inset 3px 0 0 #3dcc8a; }
-    #resourcePanel tr.ny-got.ny-child td:first-child { border-left-color: #3dcc8a; }
+    #resourcePanel tr.ny-group .ny-zone-mark { color: var(--accent); margin-right: 6px; }
+
+    #resourcePanel tr.ny-got td.delivered, #resourcePanel tr.ny-got td.score { color: var(--green-text); font-weight: 700; }
+    #resourcePanel tr.ny-got td:first-child { box-shadow: inset 3px 0 0 var(--green-text); }
+    #resourcePanel tr.ny-got.ny-child td:first-child { border-left-color: var(--green-text); }
+    #resourcePanel tr.ny-got td { background: var(--green-bg); }
+
     #resourcePanel #totalRow td {
-      background: rgba(4, 28, 48, .7); color: #b8ffe0;
-      border-top: 1px solid rgba(100, 210, 180, .3);
+      background: var(--table-head-bg); color: var(--accent);
+      font-weight: 700; border-top: 2px solid var(--border-color);
     }
+
     #nyResize {
       height: 15px; margin: 4px 0 2px; cursor: ns-resize; border-radius: 6px;
       display: flex; align-items: center; justify-content: center;
@@ -1409,111 +1360,111 @@
     }
     #nyResize::before {
       content: ""; width: 40px; height: 4px; border-radius: 2px;
-      background: rgba(110, 200, 230, .35); transition: background .2s;
+      background: var(--border-color); transition: background .2s;
     }
-    #nyResize:hover::before { background: rgba(110, 200, 230, .6); }
-    
+    #nyResize:hover::before { background: var(--accent); }
+
     #panelHeader {
       cursor: move;
-      background: linear-gradient(90deg, rgba(16, 70, 108, .7), rgba(10, 36, 64, .45));
-      padding: 8px; border-radius: 8px; margin-bottom: 8px;
+      background: var(--table-head-bg);
+      padding: 8px 12px; border-radius: 8px; margin-bottom: 10px;
       display: flex; justify-content: space-between; align-items: center;
-      border: 1px solid rgba(100, 200, 230, .22);
+      border: 1px solid var(--border-color);
       touch-action: none;
+      transition: background 0.3s, border-color 0.3s;
     }
-    #nyTitle { color: #e6fbff; text-shadow: 0 0 10px rgba(80, 200, 255, .25); }
+    #nyTitle { color: var(--text-main); font-weight: 700; }
     #resourcePanel .hdr-btns { display: flex; gap: 6px; }
     #resourcePanel .hdr-btns button {
-      background: rgba(20, 80, 120, .65); border: 1px solid rgba(120, 210, 240, .3);
-      color: #e8fbff; cursor: pointer; border-radius: 5px; padding: 6px 12px;
-      font-size: 13px; touch-action: manipulation;
+      background: var(--btn-bg); border: 1px solid var(--border-color);
+      color: var(--btn-text); cursor: pointer; border-radius: 6px; padding: 6px 12px;
+      font-size: 13px; font-weight: 600; touch-action: manipulation;
+      transition: all 0.2s;
     }
-    #resourcePanel .hdr-btns button:hover { background: rgba(40, 120, 170, .75); }
-    #resourcePanel .hint { font-size: 11px; opacity: .78; margin-top: 6px; line-height: 1.35; color: #b7dcea; }
+    #resourcePanel .hdr-btns button:hover { background: var(--btn-hover); border-color: var(--accent); }
+
+    #resourcePanel .hint { font-size: 11px; opacity: .8; margin-top: 8px; line-height: 1.4; color: var(--text-muted); }
+
     #idLog {
       margin-top: 6px; max-height: 120px; overflow: auto;
-      font-size: 11px; background: rgba(2, 14, 28, .55); border-radius: 6px; padding: 4px 6px;
-      display: none; text-align: left; border: 1px solid rgba(70, 160, 200, .25);
+      font-size: 11px; background: var(--bg-main); border-radius: 6px; padding: 6px 8px;
+      display: none; text-align: left; border: 1px solid var(--border-color);
       -webkit-overflow-scrolling: touch;
     }
-    #idLog div { padding: 2px 0; border-bottom: 1px solid rgba(40, 80, 110, .35); }
-    #idLog .st-found { color: #9cdcff; }
-    #idLog .st-delivered { color: #8ef0c0; }
-    
-    #ist .cw-ny-found { background: rgba(100,180,255,0.25); padding: 1px 2px; border-radius: 3px; }
-    #ist .cw-ny-put { background: rgba(160,255,160,0.25); padding: 1px 2px; border-radius: 3px; }
-    #ist .cw-ny-pick { background: rgba(255,196,90,0.28); padding: 1px 2px; border-radius: 3px; }
-    #ist .cw-ny-tag { cursor: help; border-bottom: 1px dotted rgba(220,240,255,.7); position: relative; }
+    #idLog div { padding: 2px 0; border-bottom: 1px solid var(--border-color); }
+    #idLog .st-found { color: var(--accent); }
+    #idLog .st-delivered { color: var(--green-text); }
 
-    #nyGate, #nyStudio { position: fixed; z-index: 1000000; font-family: sans-serif; color: #eee; }
-    #nyGate { inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; }
-    #nyGate .box { background: #1a1a1a; border: 1px solid #555; border-radius: 8px; padding: 14px 16px; width: 280px; max-width: 90vw; }
+    #ist .cw-ny-found { background: rgba(100,180,255,0.2); padding: 1px 2px; border-radius: 3px; border-bottom: 1px solid rgba(100,180,255,0.5); }
+    #ist .cw-ny-put { background: rgba(160,255,160,0.2); padding: 1px 2px; border-radius: 3px; border-bottom: 1px solid rgba(160,255,160,0.5); }
+    #ist .cw-ny-pick { background: rgba(255,196,90,0.2); padding: 1px 2px; border-radius: 3px; border-bottom: 1px solid rgba(255,196,90,0.5); }
+    #ist .cw-ny-tag { cursor: help; position: relative; }
+
+    #nyGate, #nyStudio { position: fixed; z-index: 1000000; font-family: system-ui, sans-serif; color: var(--text-main); }
+    #nyGate { inset: 0; background: rgba(0,0,0,.4); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; }
+    #nyGate .box { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; width: 280px; max-width: 90vw; box-shadow: var(--shadow); }
     #nyGate input {
-      width: 100%; box-sizing: border-box; margin: 8px 0;
-      background: #111; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 8px;
+      width: 100%; box-sizing: border-box; margin: 10px 0;
+      background: var(--bg-main); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px;
     }
     #nyGate button, #nyStudio button {
-      background: #444; border: none; color: #fff; border-radius: 4px; padding: 6px 12px; cursor: pointer;
-      touch-action: manipulation;
+      background: var(--btn-bg); border: 1px solid var(--border-color); color: var(--btn-text); border-radius: 6px; padding: 6px 12px; cursor: pointer;
+      touch-action: manipulation; font-weight: 600; transition: all 0.2s;
     }
-    #nyGate button:hover, #nyStudio button:hover { background: #5a5a5a; }
-    
+    #nyGate button:hover, #nyStudio button:hover { background: var(--btn-hover); }
+    #nyGate button.ok, #nyStudio button.ok { background: var(--accent); color: #fff; border-color: var(--accent); }
+
     #nyStudio {
       top: 10px; left: 50%; transform: translateX(-50%);
       width: 640px; max-width: 96vw; max-height: 90vh;
-      background: rgba(10,10,10,.94); border: 2px solid #3a3a3a;
-      border-radius: 8px; display: none; flex-direction: column;
+      background: var(--panel-bg); border: 1px solid var(--border-color);
+      border-radius: 12px; display: none; flex-direction: column; box-shadow: var(--shadow);
     }
     #nyStudio .st-head {
-      cursor: move; background: #222; padding: 10px;
+      cursor: move; background: var(--table-head-bg); padding: 10px 12px;
       display: flex; justify-content: space-between; align-items: center;
-      border-radius: 6px 6px 0 0;
+      border-radius: 12px 12px 0 0; border-bottom: 1px solid var(--border-color);
       touch-action: none;
     }
-    #nyStudio .st-body { overflow: auto; padding: 10px; font-size: 13px; -webkit-overflow-scrolling: touch; }
+    #nyStudio .st-body { overflow: auto; padding: 12px; font-size: 13px; -webkit-overflow-scrolling: touch; }
     #nyStudio .st-foot {
-      padding: 10px; border-top: 1px solid #333;
-      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+      padding: 12px; border-top: 1px solid var(--border-color);
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center; background: var(--table-head-bg); border-radius: 0 0 12px 12px;
     }
-    #nyStudio h3 { margin: 12px 0 6px; font-size: 13px; color: #bcd; }
-    #nyStudio .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+    #nyStudio h3 { margin: 14px 0 8px; font-size: 13px; color: var(--accent); }
+    #nyStudio .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
     #nyStudio input[type="text"], #nyStudio input[type="number"], #nyStudio select {
-      background: #141414; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 6px;
+      background: var(--bg-main); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px;
       max-width: 100%;
     }
     #nyStudio .card {
-      border: 1px solid #333; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #151515;
+      border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin-bottom: 10px; background: var(--bg-main);
     }
-    #nyStudio .card.active { border-color: #6a8; box-shadow: 0 0 0 1px #6a8; }
-    #nyStudio .card-top { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    #nyStudio .card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    #nyStudio .card-top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     #nyStudio .items { width: 100%; border-collapse: collapse; margin-top: 6px; }
-    #nyStudio .items td { padding: 3px; border-bottom: 1px solid #2a2a2a; vertical-align: middle; }
+    #nyStudio .items td { padding: 4px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
     #nyStudio .items input { width: 100%; box-sizing: border-box; }
-    #nyStudio .items img { width: 28px; height: 28px; background: #222; border-radius: 4px; }
-    #nyStudio .ny-folder-preview { width: 36px; height: 36px; background: #222; border-radius: 4px; object-fit: contain; }
+    #nyStudio .items img { width: 28px; height: 28px; background: var(--btn-bg); border-radius: 4px; }
+    #nyStudio .ny-folder-preview { width: 36px; height: 36px; background: var(--btn-bg); border-radius: 6px; object-fit: contain; border: 1px solid var(--border-color); }
     #nyStudio .chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 32px; }
     #nyStudio .chip {
       display: flex; align-items: center; gap: 4px;
-      background: #222; border: 1px solid #444; border-radius: 6px;
+      background: var(--btn-bg); border: 1px solid var(--border-color); border-radius: 6px;
       padding: 4px 8px; cursor: pointer;
     }
-    #nyStudio .chip:hover { border-color: #8ca; }
+    #nyStudio .chip:hover { border-color: var(--accent); }
     #nyStudio .chip img { width: 22px; height: 22px; }
-    #nyStudio .muted { opacity: .65; font-size: 11px; }
-    #nyStudio .danger { background: #622 !important; }
-    #nyStudio .ok { background: #264 !important; }
+    #nyStudio .muted { opacity: .7; font-size: 11px; }
+    #nyStudio .danger { background: #f44336 !important; color: #fff !important; border-color: #f44336 !important; }
     #nyStudio .zone-pill {
       display: inline-flex; gap: 4px; align-items: center;
-      background: #222; border: 1px solid #444; border-radius: 12px; padding: 4px 10px; margin: 2px;
+      background: var(--btn-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 4px 10px; margin: 2px;
     }
 
-    /* --- МОБИЛЬНАЯ АДАПТАЦИЯ --- */
     @media (max-width: 600px) {
-      #resourcePanel {
-        padding: 6px 6px 4px;
-        border-radius: 10px;
-      }
-      #panelHeader { padding: 6px; margin-bottom: 6px; }
+      #resourcePanel { padding: 8px; border-radius: 10px; }
+      #panelHeader { padding: 8px; margin-bottom: 8px; }
       #nyTitle { font-size: 13px; }
       #resourcePanel .hdr-btns button { padding: 4px 8px; font-size: 12px; }
       #resourcePanel td, #resourcePanel th { padding: 4px 2px; }
@@ -1527,8 +1478,9 @@
     }
   </style>
   <div id="panelHeader">
-    <b id="nyTitle">Ныныны · лог нырков</b>
+    <b id="nyTitle">Лог нырков</b>
     <div class="hdr-btns">
+      <button id="themeBtn" title="Сменить тему">🌙</button>
       <button id="idsBtn" title="Показать привязанные ID">ID</button>
       <button id="resetBtn" title="Обнулить счётчик">Сброс</button>
       <button id="toggleBtn" title="Скрыть панель" style="font-weight:bold; padding:2px 10px;">×</button>
@@ -1554,18 +1506,41 @@
   if (cssNode) { cssNode.id = "cwNyCss"; (document.head || document.documentElement).appendChild(cssNode); }
   mount(panel);
 
+  // --- ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ТЕМЫ ---
+  const themeBtn = panel.querySelector("#themeBtn");
+  function applyTheme(theme) {
+    if (theme === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark");
+      themeBtn.textContent = "☀️";
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      themeBtn.textContent = "🌙";
+    }
+  }
+
+  let currentTheme = localStorage.getItem(THEME_KEY) || "light";
+  applyTheme(currentTheme);
+
+  themeBtn.onclick = () => {
+    currentTheme = currentTheme === "light" ? "dark" : "light";
+    localStorage.setItem(THEME_KEY, currentTheme);
+    applyTheme(currentTheme);
+  };
+  // -----------------------------------
+
   const nyTooltip = document.createElement("div");
   nyTooltip.id = "nyTooltip";
   nyTooltip.style.cssText = `
     position: fixed; display: none; z-index: 10000000;
-    background: rgba(15, 31, 48, 0.95); color: #7ad7ff;
+    background: var(--tooltip-bg); color: var(--tooltip-text);
     font-size: 12px; line-height: 1.2;
-    padding: 6px 10px; border-radius: 4px;
-    border: 1px solid #4fc3f7;
+    padding: 6px 10px; border-radius: 6px;
+    border: 1px solid var(--tooltip-border);
     white-space: nowrap;
     pointer-events: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    box-shadow: var(--shadow);
+    font-family: system-ui, sans-serif;
+    transition: background 0.3s, border-color 0.3s, color 0.3s;
   `;
   mount(nyTooltip);
 
@@ -1607,7 +1582,7 @@
       const id = tag.getAttribute("data-cw-id");
       if (id) nyTooltip.textContent = "Уникальный ID: " + id;
       else nyTooltip.textContent = "Уникальный ID не определён";
-      
+
       nyTooltip.style.display = "block";
       const w = nyTooltip.offsetWidth;
       let left = touch.clientX + 12;
@@ -1626,10 +1601,10 @@
     let top = parseFloat(panel.style.top);
     if (Number.isNaN(left)) left = 10;
     if (Number.isNaN(top)) top = 10;
-    
+
     left = Math.min(Math.max(5, left), window.innerWidth - w - 5);
     top = Math.min(Math.max(5, top), window.innerHeight - h - 5);
-    
+
     panel.style.left = left + "px";
     panel.style.top = top + "px";
   }
@@ -1741,7 +1716,7 @@
     h = Math.max(150, Math.min(maxAllowed, Number(h) || 320));
     wrap.style.height = h + "px";
   }
-  
+
   function bindTableResize() {
     if (panel.dataset.nyResize === "1") return;
     panel.dataset.nyResize = "1";
@@ -1752,15 +1727,15 @@
       e.preventDefault(); e.stopPropagation();
       const wrap = panel.querySelector("#nyTableWrap");
       if (!wrap) return;
-      rDrag = true; 
-      y0 = e.touches ? e.touches[0].clientY : e.clientY; 
+      rDrag = true;
+      y0 = e.touches ? e.touches[0].clientY : e.clientY;
       h0 = wrap.offsetHeight;
     };
-    const moveResize = (e) => { 
-      if (!rDrag) return; 
+    const moveResize = (e) => {
+      if (!rDrag) return;
       if (e.cancelable) e.preventDefault();
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      applyTableHeight(h0 + (clientY - y0)); 
+      applyTableHeight(h0 + (clientY - y0));
     };
     const endResize = () => {
       if (!rDrag) return;
@@ -2050,7 +2025,7 @@
 
   let authorOk = false;
   let failN = 0;
-  let draft = { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES), allowedTribe: BUILTIN_TRIBE };
+  let draft = { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES) };
   let focusCat = 0;
 
   async function acceptKey(raw) {
@@ -2063,25 +2038,19 @@
     try {
       const raw = JSON.parse(localStorage.getItem(_CK) || "null");
       if (raw && Array.isArray(raw.categories) && Array.isArray(raw.zones)) {
-        if (raw.allowedTribe == null) raw.allowedTribe = BUILTIN_TRIBE;
         return raw;
       }
     } catch (e) {}
-    return { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES), allowedTribe: BUILTIN_TRIBE };
+    return { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES) };
   }
   function saveDraft() { localStorage.setItem(_CK, JSON.stringify(draft)); }
 
   function applyDraftLive() {
     compileConfig(draft.categories, draft.zones);
-    const tset = String(draft.allowedTribe || "").trim();
-    allowedTribe = looksLocked(tset) ? tset : BUILTIN_TRIBE;
     renderResourceRows();
-    if (authorOk) reviveScript(); else enforceTribe();
+    if (authorOk) reviveScript();
     const hist = document.querySelector("#ist");
     if (hist && scriptAlive) paintHistory(hist);
-    if (!looksLocked(tset) && tset) {
-      stMsg("племя применится после экспорта в новую версию скрипта");
-    }
   }
 
   const gate = document.createElement("div");
@@ -2094,7 +2063,7 @@
       <input id="nyKey" type="password" autocomplete="off">
       <div style="display:flex;gap:6px;justify-content:flex-end">
         <button type="button" id="nyKeyNo">Закрыть</button>
-        <button type="button" id="nyKeyOk">ОК</button>
+        <button type="button" id="nyKeyOk" class="ok">ОК</button>
       </div>
       <div id="nyKeyErr" class="muted" style="margin-top:6px;color:#f88"></div>
     </div>`;
@@ -2135,7 +2104,7 @@
   panel.querySelector("#nyTitle").addEventListener("click", (e) => {
     if (e.shiftKey && e.altKey) { e.preventDefault(); e.stopPropagation(); openGate(); }
   });
-  
+
   let titlePressTimer;
   panel.querySelector("#nyTitle").addEventListener("touchstart", (e) => {
     titlePressTimer = setTimeout(() => {
@@ -2156,13 +2125,6 @@
       <button type="button" id="nyStClose">×</button>
     </div>
     <div class="st-body">
-      <h3>Кто может пользоваться</h3>
-      <div class="row">
-        <span class="muted">Племя, как на странице кошки</span>
-        <input id="nyTribe" type="text" placeholder="как на странице кошки" autocomplete="off">
-      </div>
-      <div class="muted">В код попадёт ключ, не название. Пустое поле — оставить как было.</div>
-      <div class="muted" id="nyTribeRead" style="margin-bottom:8px"></div>
       <h3>Куда относить</h3>
       <div id="nyZones"></div>
       <div class="row">
@@ -2183,7 +2145,7 @@
       <button type="button" id="nyExport">Экспорт</button>
       <button type="button" id="nyRevert">Сбросить</button>
       <button type="button" id="nyPw">Сменить ключ</button>
-      <button type="button" id="nyPwReset">× ключ</button>
+      <button type="button" id="nyPwReset" class="danger">× ключ</button>
       <span id="nyStMsg" class="muted"></span>
     </div>`;
   mount(studio);
@@ -2232,17 +2194,6 @@
   }
 
   function drawStudio() {
-    const tribeInp = studio.querySelector("#nyTribe");
-    if (tribeInp) {
-      const raw = String(draft.allowedTribe || "").trim();
-      tribeInp.value = looksLocked(raw) ? "" : raw;
-    }
-    const readEl = studio.querySelector("#nyTribeRead");
-    if (readEl) {
-      readEl.textContent = lastReadTribe
-        ? ("С главной страницы сейчас: " + lastReadTribe)
-        : "С главной страницы племя не прочиталось.";
-    }
     const zbox = studio.querySelector("#nyZones");
     zbox.innerHTML = draft.zones.map((z, i) => `
       <span class="zone-pill">
@@ -2411,7 +2362,7 @@
         drawCats();
       };
     });
-        box.querySelectorAll("[data-gadd]").forEach((btn) => {
+    box.querySelectorAll("[data-gadd]").forEach((btn) => {
       btn.onclick = () => {
         const ci = +btn.dataset.gadd;
         if (!draft.categories[ci]) return;
@@ -2491,11 +2442,6 @@
   }
 
   studio.querySelector("#nySave").onclick = () => {
-    const tribeInp = studio.querySelector("#nyTribe");
-    if (tribeInp) {
-      const v = tribeInp.value.trim();
-      if (v) draft.allowedTribe = v;
-    }
     for (const c of draft.categories) {
       if (!c.key) {
         const n = (c.items || []).map((i) => i.name).find(Boolean);
@@ -2511,7 +2457,7 @@
 
   studio.querySelector("#nyRevert").onclick = () => {
     if (!confirm("Вернуть встроенную схему?")) return;
-    draft = { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES), allowedTribe: BUILTIN_TRIBE };
+    draft = { zones: clone(BUILTIN_ZONES), categories: clone(BUILTIN_CATEGORIES) };
     saveDraft();
     applyDraftLive();
     drawStudio();
@@ -2558,15 +2504,8 @@
     let cats = draft.categories;
     try { cats = await bakeExportCategories(draft.categories); }
     catch (e) { cats = draft.categories; }
-    let tribeOut = BUILTIN_TRIBE;
-    try {
-      const raw = String(draft.allowedTribe || "").trim();
-      if (looksLocked(raw)) tribeOut = raw.toLowerCase();
-      else if (raw) tribeOut = await tribeToken(raw);
-      else if (looksLocked(BUILTIN_TRIBE)) tribeOut = String(BUILTIN_TRIBE).toLowerCase();
-    } catch (e) { tribeOut = BUILTIN_TRIBE; }
+
     const text = [
-      "const BUILTIN_TRIBE = " + JSON.stringify(tribeOut) + ";",
       "const BUILTIN_ZONES = " + JSON.stringify(draft.zones, null, 2) + ";",
       "const BUILTIN_CATEGORIES = " + JSON.stringify(cats, null, 2) + ";"
     ].join("\n\n");
@@ -2715,14 +2654,9 @@
     }, 500);
   }
 
-  function mojibake(s) {
-    try { return unescape(encodeURIComponent(s)); }
-    catch (e) { return "Ð½Ñ‹Â·Ð»Ð¾Ð³"; }
-  }
-
   function restoreRealPanel() {
     const title = panel.querySelector("#nyTitle");
-    if (title) title.textContent = "Ныныны · лог нырков";
+    if (title) title.textContent = "Лог нырков";
     const box = panel.querySelector("#panelContent");
     if (!box) return;
     if (!box.querySelector("#resourceTable")) {
@@ -2741,28 +2675,6 @@
     renderResourceRows();
   }
 
-  function showBrokenShell() {
-    scriptAlive = false;
-    if (panel && !document.body.contains(panel)) mount(panel);
-    panel.style.display = "";
-    const title = panel.querySelector("#nyTitle");
-    if (title) title.textContent = mojibake("Ныныны") + " Â· " + mojibake("лог");
-    const box = panel.querySelector("#panelContent");
-    if (box) {
-      box.innerHTML = `
-        <table>
-          <tr><th>${mojibake("Ресурс")}</th><th>??</th><th>Â�</th></tr>
-          <tr><td>Ð¼Ð¾Ñ…�</td><td>?</td><td>NaN</td></tr>
-          <tr><td>Ð²ÐµÑ‚ÐºÂ�</td><td>□</td><td>—</td></tr>
-          <tr><td>Â«Â» Ã Ã</td><td>undefined</td><td>0</td></tr>
-        </table>
-        <div class="hint">${mojibake("ошибка кодировки")} / cp1251</div>`;
-    }
-    if (gate) { gate.style.display = "none"; gate.hidden = true; }
-    if (studio) { studio.style.display = "none"; studio.hidden = true; }
-    placePanelOnScreen();
-  }
-
   function reviveScript() {
     scriptAlive = true;
     if (panel && !document.body.contains(panel)) mount(panel);
@@ -2772,20 +2684,6 @@
     startGameHooks();
   }
 
-  function killScript() { showBrokenShell(); }
-
-  async function enforceTribe() {
-    if (authorOk) { reviveScript(); return; }
-    const need = String(allowedTribe || BUILTIN_TRIBE || "").trim();
-    if (!need || !looksLocked(need)) { killScript(); return; }
-    const found = await readPlayerTribe();
-    if (await tribesMatch(found, need)) { reviveScript(); return; }
-    killScript();
-  }
-
-  document.addEventListener("click", (e) => {
-    if (e.shiftKey && e.altKey && e.ctrlKey) { e.preventDefault(); e.stopPropagation(); openGate(); }
-  }, true);
-
-  enforceTribe();
+  // Запускаем скрипт без проверок племени
+  reviveScript();
 })();
